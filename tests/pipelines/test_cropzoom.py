@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
@@ -161,3 +161,24 @@ class TestPredictOnVideoFile:
         )
         assert result.bboxes.iloc[0].tolist() == [0, 0, FRAME_HEIGHT, FRAME_WIDTH]
         assert pipeline.bbox_stage.num_fallback == 1
+
+    def test_predict_on_video_file_labeled_video_only_when_requested(
+        self, pipeline, video_file, tmp_path,
+    ):
+        with patch('lightning_pose.pipelines.cropzoom.generate_labeled_video_fn') as mock_fn:
+            pipeline.predict_on_video_file(
+                video_file, tmp_path / 'a', reader='opencv', batch_size=8,
+            )
+            mock_fn.assert_not_called()
+            result = pipeline.predict_on_video_file(
+                video_file, tmp_path / 'b', reader='opencv', batch_size=8,
+                generate_labeled_video=True,
+            )
+        kwargs = mock_fn.call_args.kwargs
+        assert kwargs['video_file'] == str(video_file)
+        assert kwargs['output_mp4_file'] == str(
+            tmp_path / 'b' / 'labeled_videos' / 'video_labeled.mp4'
+        )
+        assert kwargs['preds_df'] is result.predictions
+        assert kwargs['confidence_thresh_for_vid'] == 0.3
+        assert kwargs['colormap'] == 'viridis'

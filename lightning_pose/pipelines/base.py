@@ -43,6 +43,7 @@ class Pipeline(ABC):
         reader: _Reader | None = None,
         progress_file: Path | None = None,
         batch_size: int | None = None,
+        generate_labeled_video: bool = False,
     ) -> PipelineResult:
         """Run the full pipeline on a video and save its outputs to ``output_dir``.
 
@@ -54,6 +55,8 @@ class Pipeline(ABC):
                 ``Model.predict_on_video_file``.
             progress_file: path to a file used to report progress to the App.
             batch_size: frames per batch; None lets the pipeline choose.
+            generate_labeled_video: whether to also save a keypoint-annotated video to
+                ``{output_dir}/labeled_videos/``.
 
         Returns:
             PipelineResult with the predictions and intermediates that were saved.

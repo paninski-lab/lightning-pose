@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from omegaconf import OmegaConf
 
 from lightning_pose.cli import types
+from lightning_pose.cli.bbox_args import add_bbox_sizing_args, resolve_bbox_sizing
 
 logger = logging.getLogger(__name__)
 
@@ -78,31 +79,7 @@ def register_parser(subparsers: Any) -> argparse.ArgumentParser:
         help='one or more video files, CSV files, or directories (directories are expanded to'
         ' their contained *.mp4 files)',
     )
-    parser.add_argument(
-        '--crop_ratio',
-        type=float,
-        default=None,
-        help=(
-            'size the bounding box this many times larger than the animal keypoint span'
-            ' (default 2.0 when neither --crop_ratio nor --crop_size is given).'
-            ' Mutually exclusive with --crop_size.'
-        ),
-    )
-    parser.add_argument(
-        '--crop_size',
-        type=int,
-        default=None,
-        help=(
-            'fixed square bounding box side length in pixels, centred on the per-frame mean'
-            ' of the anchor keypoints. Mutually exclusive with --crop_ratio.'
-        ),
-    )
-    parser.add_argument(
-        '--anchor_keypoints',
-        type=str,
-        default='',
-        help='comma-separated list of anchor keypoint names; defaults to all keypoints',
-    )
+    add_bbox_sizing_args(parser)
     return parser
 
 
@@ -120,32 +97,10 @@ def handle(args: argparse.Namespace) -> None:
 
     model = Model.from_dir(args.model_dir)
 
-    crop_ratio = args.crop_ratio
-    crop_size = args.crop_size
-
-    if crop_ratio is not None and crop_size is not None:
-        raise ValueError('--crop_ratio and --crop_size are mutually exclusive.')
-    if crop_ratio is None and crop_size is None:
-        crop_ratio = 2.0
-
-    anchor_keypoints = args.anchor_keypoints.split(',') if args.anchor_keypoints else []
-
-    if crop_size is not None:
-        if crop_size <= 0:
-            raise ValueError(f'--crop_size must be a positive integer, got {crop_size}.')
-        detector_cfg = OmegaConf.create({
-            'crop_height': crop_size,
-            'crop_width': crop_size,
-            'anchor_keypoints': anchor_keypoints,
-        })
-    else:
-        assert crop_ratio is not None
-        if crop_ratio <= 1:
-            raise ValueError(f'--crop_ratio must be greater than 1, got {crop_ratio}.')
-        detector_cfg = OmegaConf.create({
-            'crop_ratio': crop_ratio,
-            'anchor_keypoints': anchor_keypoints,
-        })
+    sizing, anchor_keypoints = resolve_bbox_sizing(
+        args.crop_ratio, args.crop_size, args.anchor_keypoints,
+    )
+    detector_cfg = OmegaConf.create({**sizing, 'anchor_keypoints': anchor_keypoints})
 
     input_paths: list[Path] = []
     for p in args.input_path:

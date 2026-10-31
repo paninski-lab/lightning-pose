@@ -39,7 +39,9 @@ Lightning Pose model. We provide additional tools that help you compose these mo
   remaps the predictions to the original coordinate space.
 
 Alternatively, ``litpose predict --bbox_dir`` combines the crop, predict, and remap steps
-into a single command — see :ref:`prediction-on-videos` for details.
+into a single command, and ``litpose predict --detector`` goes one step further and also runs
+the detector, so a video goes from raw frames to original-coordinate predictions in a single
+in-memory pass — see :ref:`prediction-on-videos` for details.
 
 For the full command-line reference for these tools, see the CLI page sections:
 :ref:`Create bbox <cli-create-bbox>`, :ref:`Smooth bbox <cli-smooth-bbox>`,
@@ -70,7 +72,8 @@ Inference involves:
 
 .. note::
 
-   Steps 4–6 can be replaced by a single ``litpose predict --bbox_dir`` call —
+   Steps 4–6 can be replaced by a single ``litpose predict --bbox_dir`` call, and all of
+   steps 1–6 (except smoothing) by a single ``litpose predict --detector`` call —
    see :ref:`prediction-on-videos` in the example below.
 
 
@@ -259,6 +262,46 @@ Prediction on videos
          litpose predict $MODEL_DIR/$POSE_MODEL data/videos/test_vid.mp4 \
              --bbox_dir $MODEL_DIR/$DETECTOR_MODEL/video_preds/bboxes_smooth
 
+   .. tab-item:: Predict with detector and pose model together
+
+      A single command loads both models, runs the detector on every frame, computes a
+      bounding box from its keypoints, crops the full-resolution frame, runs the pose model
+      on the crop, and maps the keypoints back to the original coordinate space. The positional
+      model directory is the **pose** model; ``--detector`` points at the detector model.
+
+      **Pros**
+
+      - One command, one pass over the video, nothing intermediate written to disk except the
+        final outputs: ``<video_stem>.csv`` (predictions in original coordinates) and
+        ``<video_stem>_bbox.csv`` (the per-frame boxes), both saved under
+        ``$MODEL_DIR/$POSE_MODEL/video_preds``. The bbox file can be reused with
+        ``--bbox_dir`` or ``litpose crop``.
+      - The detector and pose model are independent: they may use different
+        ``image_resize_dims`` and different keypoints.
+
+      **Cons**
+
+      - Bounding boxes are **not smoothed**. A frame whose detector confidence for any anchor
+        keypoint is below ``--detector_confidence_thresh`` (default 0.5) reuses the previous
+        frame's box (the full frame, if there is no previous box). If you want smoothing,
+        use the multi-command workflows above.
+      - Full-resolution frames are held in memory while they are cropped, and both models
+        are loaded at once. If inference runs out of GPU memory, lower ``--batch_size``
+        (default 16 for this command).
+      - Videos only (not labeled-frame CSVs), single-view and non-context models only,
+        eager runtime only.
+
+      .. code-block:: bash
+
+         #!/bin/bash
+
+         litpose predict $MODEL_DIR/$POSE_MODEL data/videos/test_vid.mp4 \
+             --detector $MODEL_DIR/$DETECTOR_MODEL
+
+         # Control the bounding box with the same options as `litpose create_bbox`:
+         litpose predict $MODEL_DIR/$POSE_MODEL data/videos/test_vid.mp4 \
+             --detector $MODEL_DIR/$DETECTOR_MODEL --crop_size 200 --anchor_keypoints nose,tail
+
 For detailed command-line options, see :ref:`Create bbox <cli-create-bbox>`,
 :ref:`Smooth bbox <cli-smooth-bbox>`, :ref:`Crop <cli-crop>`, and :ref:`Remap <cli-remap>`.
 
@@ -289,4 +332,6 @@ The same is available from the Python API with
 Limitations
 ===========
 
+* ``litpose predict --detector`` does not yet support multiview models, context models,
+  or bounding-box smoothing.
 * Pose models do not yet support PCA Multiview loss.

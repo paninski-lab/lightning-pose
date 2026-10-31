@@ -22,6 +22,7 @@ from lightning_pose.pipelines.stages import KeypointBboxStage
 from lightning_pose.utils.device import get_accelerator
 from lightning_pose.utils.inference_types import _Precision, _Reader
 from lightning_pose.utils.predictions import PredictionHandler
+from lightning_pose.utils.predictions import generate_labeled_video as generate_labeled_video_fn
 
 logger = logging.getLogger(__name__)
 
@@ -179,6 +180,7 @@ class CropZoomPipeline(Pipeline):
         reader: _Reader | None = None,
         progress_file: Path | None = None,
         batch_size: int | None = DEFAULT_BATCH_SIZE,
+        generate_labeled_video: bool = False,
     ) -> PipelineResult:
         """Run detector and pose estimator on a video, saving predictions and bboxes.
 
@@ -200,6 +202,8 @@ class CropZoomPipeline(Pipeline):
             batch_size: frames per batch. Defaults to ``DEFAULT_BATCH_SIZE``, deliberately
                 smaller than the models' own ``cfg.dali`` prediction batch since frames are
                 full resolution; None uses the pose estimator's ``cfg.dali`` value.
+            generate_labeled_video: whether to also save a keypoint-annotated video to
+                ``{output_dir}/labeled_videos/{video_stem}_labeled.mp4``.
 
         Returns:
             PipelineResult with the predictions and the bboxes that were saved.
@@ -297,4 +301,14 @@ class CropZoomPipeline(Pipeline):
         preds_df.to_csv(output_dir / f'{video_file.stem}.csv')
         # lineterminator='\n' keeps output byte-identical across platforms, as in generate_bbox
         bbox_df.to_csv(output_dir / f'{video_file.stem}_bbox.csv', lineterminator='\n')
+        if generate_labeled_video:
+            labeled_dir = output_dir / 'labeled_videos'
+            labeled_dir.mkdir(parents=True, exist_ok=True)
+            generate_labeled_video_fn(
+                video_file=str(video_file),
+                preds_df=preds_df,
+                output_mp4_file=str(labeled_dir / f'{video_file.stem}_labeled.mp4'),
+                confidence_thresh_for_vid=self.pose_estimator.cfg.eval.confidence_thresh_for_vid,
+                colormap=self.pose_estimator.cfg.eval.get('colormap', 'cool'),
+            )
         return PipelineResult(predictions=preds_df, bboxes=bbox_df)

@@ -74,6 +74,7 @@ def make_fake_model(
             'keypoint_names': [f'kp{i}' for i in range(num_keypoints)],
             'image_resize_dims': {'height': resize_dims[0], 'width': resize_dims[1]},
         },
+        'eval': {'confidence_thresh_for_vid': 0.3, 'colormap': 'viridis'},
         'dali': {
             'base': {'train': {'sequence_length': 4}, 'predict': {'sequence_length': 96}},
             'context': {'train': {'batch_size': 4}, 'predict': {'sequence_length': 96}},

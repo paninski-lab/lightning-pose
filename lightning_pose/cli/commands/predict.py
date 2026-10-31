@@ -10,6 +10,7 @@ from pprint import pformat
 from typing import TYPE_CHECKING, Any, get_args
 
 from lightning_pose.cli import types
+from lightning_pose.cli.bbox_args import add_bbox_sizing_args, resolve_bbox_sizing
 from lightning_pose.utils.inference_types import _OnnxPrecision, _Precision, _Reader, _Runtime
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,17 @@ def register_parser(subparsers: Any) -> argparse.ArgumentParser:
                 └── labeled_videos/
                     └── <video_filename>_labeled.mp4
 
+          With ``--detector``, a detector model and this (pose) model run back
+          to back in memory: the detector's keypoints define a per-frame
+          bounding box, each frame is cropped to it, and predictions are
+          returned in original frame coordinates. Outputs are saved next to
+          the pose model's video predictions::
+
+            <model_dir>/
+            └── video_preds/
+                ├── <video_filename>.csv         (original coordinates)
+                └── <video_filename>_bbox.csv    (per-frame bounding boxes)
+
           Image predictions are saved to::
 
             <model_dir>/
@@ -52,10 +64,16 @@ def register_parser(subparsers: Any) -> argparse.ArgumentParser:
                     └── <image_filename>_labeled.png
         """
         ),
-        usage="litpose predict <model_dir> <input_path:video|image|dir|csv>...  [OPTIONS]",
+        usage=(
+            "litpose predict <model_dir> <input_path:video|image|dir|csv>...  [OPTIONS]\n"
+            "       litpose predict <pose_model_dir> <input_path:video|dir>... "
+            "--detector <detector_model_dir> [OPTIONS]"
+        ),
     )
     predict_parser.add_argument(
-        "model_dir", type=types.existing_model_dir, help="path to a model directory"
+        "model_dir",
+        type=types.existing_model_dir,
+        help="path to a model directory (the pose model, when --detector is given)",
     )
 
     predict_parser.add_argument(
@@ -174,6 +192,33 @@ def register_parser(subparsers: Any) -> argparse.ArgumentParser:
         "prediction after compiling is slower due to compilation overhead.",
     )
 
+    cropzoom_args = predict_parser.add_argument_group(
+        "cropzoom pipeline",
+        "run a detector and this (pose) model back to back in memory; video inputs only",
+    )
+    cropzoom_args.add_argument(
+        "--detector",
+        type=types.existing_model_dir,
+        default=None,
+        help=(
+            "path to a detector model directory. When given, each frame is passed through the "
+            "detector, cropped to a bounding box computed from its keypoints, and passed "
+            "through the pose model (model_dir). Incompatible with --bbox_dir, --overrides, "
+            "--runtime onnx/tensorrt, and --compile. Per-frame boxes are not smoothed; frames "
+            "without a usable detection reuse the previous frame's box."
+        ),
+    )
+    add_bbox_sizing_args(cropzoom_args)
+    cropzoom_args.add_argument(
+        "--detector_confidence_thresh",
+        type=float,
+        default=None,
+        help=(
+            "a frame whose detector confidence is below this value for any anchor keypoint "
+            "reuses the previous frame's box. 0 disables the check. Default: 0.5."
+        ),
+    )
+
     post_prediction_args = predict_parser.add_argument_group("post-prediction")
     post_prediction_args.add_argument(
         "--skip_viz",
@@ -201,6 +246,12 @@ def handle(args: argparse.Namespace) -> None:
     """Handle the predict command."""
     # Delay this import because it's slow.
     from lightning_pose.api import Model
+
+    if args.detector is not None:
+        _validate_cropzoom_args(args)
+        _predict_cropzoom(args)
+        return
+    _reject_cropzoom_only_args(args)
 
     # Checked before constructing the model so the user gets this message rather
     # than the equivalent RuntimeError from Model.compile(), which would surface
@@ -246,6 +297,109 @@ def handle(args: argparse.Namespace) -> None:
                 bbox_dir=args.bbox_dir,
                 reader=args.reader,
             )
+
+
+_CROPZOOM_ONLY_FLAGS = (
+    ("crop_ratio", "--crop_ratio"),
+    ("crop_size", "--crop_size"),
+    ("detector_confidence_thresh", "--detector_confidence_thresh"),
+)
+
+
+def _reject_cropzoom_only_args(args: argparse.Namespace) -> None:
+    """Raise if a cropzoom-pipeline option was given without ``--detector``.
+
+    Args:
+        args: parsed command-line arguments.
+
+    Raises:
+        ValueError: if any of the bbox sizing / detector options is set.
+    """
+    given = [flag for attr, flag in _CROPZOOM_ONLY_FLAGS if getattr(args, attr) is not None]
+    if args.anchor_keypoints:
+        given.append("--anchor_keypoints")
+    if given:
+        raise ValueError(f"{', '.join(given)} only take effect together with --detector.")
+
+
+def _validate_cropzoom_args(args: argparse.Namespace) -> None:
+    """Raise if ``--detector`` is combined with options the pipeline does not support.
+
+    Checked before any model is built so the user gets this message up front.
+
+    Args:
+        args: parsed command-line arguments.
+
+    Raises:
+        ValueError: if an incompatible option is set.
+    """
+    incompatible = {
+        "--bbox_dir": args.bbox_dir is not None,
+        "--overrides": bool(args.overrides),
+        "--compile": args.compile,
+        "--runtime": args.runtime != "eager",
+    }
+    given = [flag for flag, is_set in incompatible.items() if is_set]
+    if given:
+        raise ValueError(
+            f"{', '.join(given)} cannot be combined with --detector (the pipeline computes "
+            f"its own bboxes and runs both models in eager mode)."
+        )
+
+
+def _predict_cropzoom(args: argparse.Namespace) -> None:
+    """Run the detector -> crop -> pose estimator pipeline on the input videos.
+
+    Args:
+        args: parsed command-line arguments; ``args.detector`` is set.
+
+    Raises:
+        NotImplementedError: if an input is not a video or directory of videos.
+        ValueError: if the bbox sizing options are invalid.
+    """
+    # delay this import because it's slow
+    from lightning_pose.pipelines import CropZoomPipeline
+
+    sizing, anchor_keypoints = resolve_bbox_sizing(
+        args.crop_ratio, args.crop_size, args.anchor_keypoints,
+    )
+    thresh = args.detector_confidence_thresh
+    pipeline = CropZoomPipeline.from_dirs(
+        detector_dir=args.detector,
+        pose_estimator_dir=args.model_dir,
+        anchor_keypoints=anchor_keypoints,
+        confidence_thresh=0.5 if thresh is None else thresh,
+        precision=args.precision,
+        **sizing,
+    )
+
+    video_files: list[Path] = []
+    for p in (Path(p) for p in args.input_path):
+        if p.is_dir():
+            logger.info(f'processing directory {p}')
+            video_files.extend(sorted(f for f in p.iterdir() if f.suffix == ".mp4"))
+        elif p.suffix == ".mp4":
+            video_files.append(p)
+        else:
+            raise NotImplementedError(
+                f"--detector only supports video inputs (.mp4 files or directories of them), "
+                f"got {p}."
+            )
+
+    output_dir = pipeline.pose_estimator.video_preds_dir()
+    extra_kwargs = {} if args.batch_size is None else {"batch_size": args.batch_size}
+    for video_file in video_files:
+        if not args.overwrite and (output_dir / f"{video_file.stem}.csv").exists():
+            logger.info(f'skipping {video_file} (prediction file already exists)')
+            continue
+        pipeline.predict_on_video_file(
+            video_file,
+            output_dir,
+            reader=args.reader,
+            progress_file=args.progress_file,
+            generate_labeled_video=not args.skip_viz,
+            **extra_kwargs,
+        )
 
 
 def _predict_multi_type(
