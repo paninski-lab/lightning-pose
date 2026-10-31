@@ -278,6 +278,31 @@ class TestPrepareDALI:
         assert vid_pred_class._pipe_dict['predict']['base']['resize_dims'] is None
         assert vid_pred_class._pipe_dict['predict']['context']['resize_dims'] is None
 
+    def test_bbox_df_requires_resize_dims(self, cfg, video_list):
+        """bbox cropping needs a post-crop resize target, so resize_dims=None raises."""
+        bbox_df = pd.DataFrame({'x': [0], 'y': [0], 'h': [100], 'w': [100]})
+        with pytest.raises(ValueError, match='resize_dims is required when bbox_df'):
+            PrepareDALI(
+                train_stage='predict',
+                model_type='base',
+                filenames=video_list,
+                dali_config=cfg.dali,
+                resize_dims=None,
+                bbox_df=bbox_df,
+            )
+
+    def test_no_resize_dims_without_bbox_df_is_full_resolution(self, cfg, video_list):
+        """resize_dims=None with no bbox_df leaves the predict pipes at full resolution."""
+        vid_pred_class = PrepareDALI(
+            train_stage='predict',
+            model_type='base',
+            filenames=video_list,
+            dali_config=cfg.dali,
+            resize_dims=None,
+        )
+        assert vid_pred_class._pipe_dict['predict']['base']['resize_dims'] is None
+        assert vid_pred_class._pipe_dict['predict']['context']['resize_dims'] is None
+
     def test_bbox_df_count_must_match_num_views(self, cfg, video_list):
         """Passing more bbox DataFrames than views raises a ValueError."""
         bbox_df = pd.DataFrame({'x': [0], 'y': [0], 'h': [100], 'w': [100]})

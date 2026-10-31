@@ -42,6 +42,7 @@ class Pipeline(ABC):
         output_dir: str | Path,
         reader: _Reader | None = None,
         progress_file: Path | None = None,
+        batch_size: int | None = None,
     ) -> PipelineResult:
         """Run the full pipeline on a video and save its outputs to ``output_dir``.
 
@@ -52,6 +53,7 @@ class Pipeline(ABC):
             reader: video-reading backend; None auto-selects, as in
                 ``Model.predict_on_video_file``.
             progress_file: path to a file used to report progress to the App.
+            batch_size: frames per batch; None lets the pipeline choose.
 
         Returns:
             PipelineResult with the predictions and intermediates that were saved.

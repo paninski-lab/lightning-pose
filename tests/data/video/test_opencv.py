@@ -162,6 +162,28 @@ class TestPrepareOpenCV:
         )
         assert prep._decode_resize_dims == [256, 256]
 
+    def test_bbox_df_requires_resize_dims(self, cfg, video_list):
+        """bbox cropping needs a post-crop resize target; fail before any decoder exists."""
+        bbox_df = pd.DataFrame({'x': [0], 'y': [0], 'h': [10], 'w': [10]})
+        with pytest.raises(ValueError, match='resize_dims is required when bbox_df'):
+            PrepareOpenCV(
+                model_type='base',
+                filenames=video_list,
+                resize_dims=None,
+                dali_config=cfg.dali,
+                bbox_df=bbox_df,
+            )
+
+    def test_no_resize_dims_without_bbox_df_decodes_full_resolution(self, cfg, video_list):
+        """resize_dims=None with no bbox_df is the full-resolution passthrough mode."""
+        prep = PrepareOpenCV(
+            model_type='base',
+            filenames=video_list,
+            resize_dims=None,
+            dali_config=cfg.dali,
+        )
+        assert prep._decode_resize_dims is None
+
     def test_call_builds_wrapper_with_correct_params(self, cfg, video_list, monkeypatch):
         """Integration check: PrepareOpenCV() actually produces a correctly-configured
         LitOpenCVWrapper. Unlike pynvvc/dali, no mocking is needed here -- cv2.VideoCapture
@@ -243,9 +265,8 @@ class TestLitOpenCVWrapper:
             for _ in range(num_views)
         ]
         wrapper._tail = [[] for _ in range(num_views)]
-        # resize_dims is always a concrete list on the real class (unlike
-        # decode_resize_dims, which is the actually-optional one) -- default to a
-        # harmless placeholder when a test doesn't care about its value.
+        # resize_dims is only None in full-resolution passthrough mode; default to a harmless
+        # placeholder when a test doesn't care about its value.
         wrapper.resize_dims = resize_dims if resize_dims is not None else [64, 64]
         wrapper.decode_resize_dims = decode_resize_dims
         wrapper.sequence_length = sequence_length
@@ -364,6 +385,17 @@ class TestLitOpenCVWrapper:
         expected_bbox = torch.tensor([0, 0, 100, 120], dtype=torch.float32)
         for i in range(4):
             assert torch.allclose(batch['bbox'][i], expected_bbox)
+
+    def test_next_full_resolution_passthrough(self):
+        """No bbox_df and no decode resize: native-size frames with a full-frame bbox."""
+        wrapper = self._make_wrapper(
+            total_frames=20, sequence_length=4, decode_resize_dims=None,
+        )
+        wrapper.num_iters = 1
+        batch = next(wrapper)
+        assert batch['frames'].shape == (4, 3, 100, 120)
+        expected_bbox = torch.tensor([0, 0, 100, 120], dtype=torch.float32).repeat(4, 1)
+        assert torch.allclose(batch['bbox'], expected_bbox)
 
     def test_next_bbox_crop_output_shape(self, bbox_df):
         wrapper = self._make_wrapper(

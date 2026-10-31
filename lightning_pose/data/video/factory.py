@@ -84,7 +84,7 @@ def build_video_reader(
     model_type: Literal["base", "context"],
     dali_config: dict | DictConfig | ListConfig,
     filenames: list[str] | list[list[str]],
-    resize_dims: list[int],
+    resize_dims: list[int] | None,
     bbox_df: pd.DataFrame | list[pd.DataFrame] | None,
 ) -> LitDaliWrapper | LitPynvvcWrapper | LitOpenCVWrapper:
     """Resolve which video-reading backend to use and build its dataloader.
@@ -110,7 +110,10 @@ def build_video_reader(
         filenames: for single-view, a flat list containing one video path; for
             multiview, one single-element list per view (see each backend's
             ``Prepare<Name>`` class for the exact shape).
-        resize_dims: ``[height, width]`` the model expects as input.
+        resize_dims: ``[height, width]`` the model expects as input. ``None`` (only valid
+            without ``bbox_df``) selects full-resolution passthrough: frames are delivered
+            ImageNet-normalized at the video's native size, with a full-frame ``bbox``, for
+            callers that do their own resizing/cropping (e.g. ``CropZoomPipeline``).
         bbox_df: optional per-frame bbox DataFrame; for multiview, a list with one
             DataFrame per view (same order as ``filenames``).
 

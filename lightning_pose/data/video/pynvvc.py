@@ -152,7 +152,7 @@ class LitPynvvcWrapper(LitPredictWrapperBase):
     def __init__(
         self,
         filenames: list[list[str]],
-        resize_dims: list[int],
+        resize_dims: list[int] | None,
         decode_resize_dims: list[int] | None,
         sequence_length: int,
         step: int,
@@ -262,7 +262,7 @@ class PreparePynvvc(PreparePredictBase):
         self,
         model_type: Literal['base', 'context'],
         filenames: list[str] | list[list[str]],
-        resize_dims: list[int],
+        resize_dims: list[int] | None,
         dali_config: dict | DictConfig | ListConfig,
         gpu_id: int = 0,
         bbox_df: pd.DataFrame | list[pd.DataFrame] | None = None,
