@@ -1,5 +1,6 @@
 """Tests for lightning_pose.pipelines.cropzoom."""
 
+import gc
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -8,11 +9,15 @@ import numpy as np
 import pandas as pd
 import pytest
 import torch
+from omegaconf import OmegaConf
 
+import lightning_pose.utils.cropzoom as cz
+from lightning_pose.api import Model
 from lightning_pose.pipelines import CropZoomPipeline, KeypointBboxStage
 from tests.pipelines.conftest import (
     FRAME_HEIGHT,
     FRAME_WIDTH,
+    NUM_CLIP_FRAMES,
     NUM_FRAMES,
     RESIZE_DETECTOR,
     RESIZE_POSE,
@@ -182,3 +187,135 @@ class TestPredictOnVideoFile:
         assert kwargs['preds_df'] is result.predictions
         assert kwargs['confidence_thresh_for_vid'] == 0.3
         assert kwargs['colormap'] == 'viridis'
+
+
+ANCHOR_KEYPOINTS = ['nose_top', 'tailBase_top']
+CROP_RATIO = 2.0
+BATCH_SIZE = 8
+
+
+def _run_pipeline(model_dir: Path, clip: Path, out: Path, reader: str):
+    """Run CropZoomPipeline with the same checkpoint as detector and pose estimator."""
+    pipeline = CropZoomPipeline.from_dirs(
+        detector_dir=model_dir,
+        pose_estimator_dir=model_dir,
+        anchor_keypoints=ANCHOR_KEYPOINTS,
+        crop_ratio=CROP_RATIO,
+    )
+    return pipeline, pipeline.predict_on_video_file(
+        clip, out, reader=reader, batch_size=BATCH_SIZE,
+    )
+
+
+def _run_two_step(model_dir: Path, clip: Path, out: Path, reader: str):
+    """The multi-command flow: predict -> create_bbox -> predict --bbox_dir.
+
+    Returns:
+        (predictions DataFrame, bbox DataFrame), the reference for the pipeline's outputs.
+    """
+    model = Model.from_dir(model_dir)
+    model.predict_on_video_file(
+        clip, output_dir=out / 'detector', compute_metrics=False, reader=reader,
+    )
+    bbox_file = out / 'detector' / f'{clip.stem}_bbox.csv'
+    cz.generate_bbox(
+        input_preds_file=out / 'detector' / f'{clip.stem}.csv',
+        detector_cfg=OmegaConf.create(
+            {'crop_ratio': CROP_RATIO, 'anchor_keypoints': ANCHOR_KEYPOINTS}
+        ),
+        output_bbox_file=bbox_file,
+    )
+    result = model.predict_on_video_file(
+        clip, output_dir=out / 'pose', compute_metrics=False, reader=reader,
+        bbox_file=bbox_file,
+    )
+    return result.predictions, pd.read_csv(bbox_file, index_col=0)
+
+
+def _assert_matches_reference(
+    result, ref_preds: pd.DataFrame, ref_bboxes: pd.DataFrame, bbox_atol: float, kp_atol: float,
+) -> None:
+    """Pipeline outputs must match the two-step flow (tolerances are in pixels)."""
+    assert result.predictions.shape == ref_preds.shape == (NUM_CLIP_FRAMES, ref_preds.shape[1])
+    assert list(result.predictions.columns) == list(ref_preds.columns)
+    assert list(result.bboxes.columns) == list(ref_bboxes.columns) == ['x', 'y', 'h', 'w']
+    assert len(result.bboxes) == len(ref_bboxes) == NUM_CLIP_FRAMES
+    bbox_diff = np.abs(result.bboxes.to_numpy() - ref_bboxes.to_numpy()).max()
+    assert bbox_diff <= bbox_atol, f'max bbox difference {bbox_diff} px > {bbox_atol}'
+    kp_diff = np.abs(result.predictions.to_numpy() - ref_preds.to_numpy()).max()
+    assert kp_diff <= kp_atol, f'max prediction difference {kp_diff} > {kp_atol}'
+
+
+class TestCropZoomPipelineToyModel:
+    """End-to-end CropZoomPipeline runs with the real toy checkpoint (CPU, no GPU needed)."""
+
+    @pytest.fixture(autouse=True)
+    def force_cpu(self, monkeypatch):
+        # the pipeline and Model.predict_on_video_file's Trainer both pick the GPU when visible
+        monkeypatch.setattr('lightning_pose.pipelines.cropzoom.get_accelerator', lambda: 'cpu')
+        monkeypatch.setattr('lightning_pose.utils.predictions.get_accelerator', lambda: 'cpu')
+
+    def test_matches_two_step_flow(self, toy_model_dir, toy_clip, tmp_path):
+        """One in-memory pass equals predict -> create_bbox -> predict --bbox_dir."""
+        ref_preds, ref_bboxes = _run_two_step(toy_model_dir, toy_clip, tmp_path / 'ref', 'opencv')
+        _, result = _run_pipeline(toy_model_dir, toy_clip, tmp_path / 'pipe', 'opencv')
+        _assert_matches_reference(result, ref_preds, ref_bboxes, bbox_atol=1, kp_atol=1e-2)
+
+    def test_writes_standard_outputs(self, toy_model_dir, toy_clip, tmp_path):
+        out = tmp_path / 'pipe'
+        _, result = _run_pipeline(toy_model_dir, toy_clip, out, 'opencv')
+        assert (out / f'{toy_clip.stem}.csv').is_file()
+        assert (out / f'{toy_clip.stem}_bbox.csv').is_file()
+        assert np.isfinite(result.predictions.to_numpy()).all()
+        assert (result.bboxes[['h', 'w']] > 0).all(axis=None)
+
+
+def _skip_unless_reader_usable(reader: str, video: Path) -> None:
+    """Skip the test if the GPU or the requested reader is unavailable on this machine.
+
+    Probes are done lazily here, not at import: PyNvVideoCodec's probe aborts natively when
+    there is no CUDA device, so it must never run during CPU-only collection.
+    """
+    if not torch.cuda.is_available():
+        pytest.skip('no CUDA device')
+    if reader == 'dali':
+        pytest.importorskip('nvidia.dali', reason='nvidia-dali not installed')
+    elif reader == 'pynvvc':
+        from lightning_pose.data.video.pynvvc import is_pynvvc_available
+
+        if not is_pynvvc_available(str(video)):
+            pytest.skip('PyNvVideoCodec cannot decode on this GPU/driver')
+
+
+@pytest.mark.gpu
+class TestCropZoomPipelineToyModelGpu:
+    """CropZoomPipeline on a GPU with each video reader: does it run, and clean up after itself.
+
+    The CPU tests cannot see device-mismatch bugs or the DALI / PyNvVideoCodec
+    full-resolution passthrough paths; these do. They check that the outputs are well-formed,
+    not that they are numerically right: correctness against the two-step flow is covered on CPU
+    (``TestCropZoomPipelineToyModel``), and different readers' decoders legitimately differ.
+    """
+
+    @pytest.mark.parametrize('reader', ['opencv', 'pynvvc', 'dali'])
+    def test_runs_with_reader(self, reader, toy_model_dir, toy_clip, tmp_path):
+        _skip_unless_reader_usable(reader, toy_clip)
+
+        gc.collect()
+        torch.cuda.empty_cache()
+        baseline = torch.cuda.memory_allocated()
+        out = tmp_path / 'pipe'
+        pipeline, result = _run_pipeline(toy_model_dir, toy_clip, out, reader)
+
+        assert (out / f'{toy_clip.stem}.csv').is_file()
+        assert (out / f'{toy_clip.stem}_bbox.csv').is_file()
+        assert len(result.predictions) == len(result.bboxes) == NUM_CLIP_FRAMES
+        assert np.isfinite(result.predictions.to_numpy()).all()
+        assert (result.bboxes[['h', 'w']] > 0).all(axis=None)
+
+        # the pipeline leaves the GPU as it found it: weights back on CPU, no leaked tensors
+        for model in (pipeline.detector, pipeline.pose_estimator):
+            assert model.model is not None
+            assert next(model.model.parameters()).device.type == 'cpu'
+        gc.collect()
+        assert torch.cuda.memory_allocated() - baseline < 64 * 2**20
