@@ -803,3 +803,31 @@ class TestGetCallbacks:
         callbacks = get_callbacks(cfg_tmp)
         types = [type(cb) for cb in callbacks]
         assert PatchMasking in types
+
+
+class TestUnfreezeBackboneLinearWarmup:
+    """Test the linear warmup_steps ramp of UnfreezeBackbone."""
+
+    def test_unfreeze_backbone_linear_warmup_ramp(self):
+        from lightning_pose.callbacks import UnfreezeBackbone
+        cb = UnfreezeBackbone(unfreeze_step=100, warmup_steps=1000, initial_ratio=0.1)
+        lr = 5e-5
+        assert cb._get_backbone_lr(99, 0, lr) == 0.0
+        assert cb._get_backbone_lr(100, 0, lr) == pytest.approx(0.1 * lr)
+        assert cb._get_backbone_lr(600, 0, lr) == pytest.approx(0.55 * lr)   # halfway
+        assert not cb._warmed_up
+        assert cb._get_backbone_lr(1100, 0, lr) == pytest.approx(lr)
+        assert cb._warmed_up
+
+    def test_unfreeze_backbone_geometric_default_reaches_full_lr_in_six_steps(self):
+        from lightning_pose.callbacks import UnfreezeBackbone
+        cb = UnfreezeBackbone(unfreeze_step=100)
+        lr = 5e-5
+        cb._get_backbone_lr(100, 0, lr)
+        lrs = [cb._get_backbone_lr(100 + k, 0, lr) for k in range(1, 7)]
+        assert lrs[-1] == pytest.approx(lr)   # the stock ramp: full LR 6 steps after unfreezing
+
+    def test_unfreeze_backbone_warmup_steps_needs_step_mode(self):
+        from lightning_pose.callbacks import UnfreezeBackbone
+        with pytest.raises(ValueError, match='needs unfreeze_step'):
+            UnfreezeBackbone(unfreeze_epoch=20, warmup_steps=1000)

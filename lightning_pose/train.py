@@ -422,6 +422,8 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
         # To understand why we set this, see 'max_size_cycle' in UnlabeledDataModule.
         limit_train_batches=cfg.training.get("limit_train_batches") or steps_per_epoch,
         accumulate_grad_batches=cfg.training.get("accumulate_grad_batches", 1),
+        # clip the global gradient norm (None = off, the stock behavior)
+        gradient_clip_val=cfg.training.get("gradient_clip_val", None),
         profiler=cfg.training.get("profiler", None),
         sync_batchnorm=True,
     )
