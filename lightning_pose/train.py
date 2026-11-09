@@ -288,8 +288,13 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
+    if cfg.training.get('imgaug_seed') is not None:
+        # imgaug keeps its own global RNG; seed it for reproducible augmentation
+        import imgaug
+        imgaug.seed(int(cfg.training.imgaug_seed))
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
+
 
     # record lightning-pose version
     with open_dict(cfg):
