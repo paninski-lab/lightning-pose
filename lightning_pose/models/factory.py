@@ -281,6 +281,14 @@ def get_model(
             downsample_factor=cfg.data.get('downsample_factor', 2),
             backbone_checkpoint=cfg.model.get('backbone_checkpoint'),
         )
+        # nonlinear head (per-pixel MLP readout); None = stock linear head
+        head_hidden_channels = cfg.model.get('head_hidden_channels', None)
+        if head_hidden_channels:
+            extra['head_hidden_channels'] = int(head_hidden_channels)
+            logger.info(
+                f'nonlinear head: ConvT -> {int(head_hidden_channels)} -> LayerNorm -> ReLU '
+                f'-> Conv1x1'
+            )
     elif cfg.model.model_type == 'heatmap_mhcrnn':
         extra = dict(
             downsample_factor=cfg.data.get('downsample_factor', 2),

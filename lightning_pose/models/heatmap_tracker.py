@@ -47,6 +47,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         optimizer_params: DictConfig | ListConfig | dict | None = None,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: DictConfig | ListConfig | dict | None = None,
+        head_hidden_channels: int | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize a heatmap-based pose estimation model with conv or transformer backbone.
@@ -62,6 +63,8 @@ class HeatmapTracker(BaseSupervisedTracker):
             lr_scheduler: how to schedule learning rate
             lr_scheduler_params: params for specific learning rate schedulers
                 multisteplr: milestones, gamma
+            head_hidden_channels: None = stock linear head; an int makes the head nonlinear
+                (see ``HeatmapHead(hidden_channels=...)``).
 
         """
 
@@ -91,6 +94,7 @@ class HeatmapTracker(BaseSupervisedTracker):
             in_channels=self.num_fc_input_features,
             out_channels=self.num_keypoints,
             downsample_factor=self.downsample_factor,
+            hidden_channels=head_hidden_channels,
         )
 
         self.loss_factory = loss_factory
