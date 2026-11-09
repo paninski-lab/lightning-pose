@@ -157,6 +157,7 @@ def get_dataset(
                 do_context=False,  # no context for regression models
                 bbox_path=cfg.data.get('bbox_file', None),
                 imgaug_hflip=imgaug_hflip,
+                dataset_names=cfg.data.get('dataset_names', None),
             )
     elif cfg.model.model_type.find('heatmap') > -1:
         if cfg.data.get('view_names', None) and len(cfg.data.view_names) > 1:
@@ -206,6 +207,7 @@ def get_dataset(
                 uniform_heatmaps=cfg.training.get('uniform_heatmaps_for_nan_keypoints', False),
                 bbox_path=cfg.data.get('bbox_file', None),
                 imgaug_hflip=imgaug_hflip,
+                dataset_names=cfg.data.get('dataset_names', None),
             )
 
     else:
@@ -268,6 +270,12 @@ def get_data_module(
     )
     val_batch_size = int(np.ceil(cfg.training.val_batch_size / cfg.training.num_gpus))
 
+    # multi-dataset sampling temperature; the string 'inf' (Hydra has no float-inf
+    # literal) maps to dataset-uniform supervision shares
+    sampling_temperature = cfg.training.get('sampling_temperature', None)
+    if isinstance(sampling_temperature, str):
+        sampling_temperature = float(sampling_temperature)
+
     from lightning_pose.models import check_if_semi_supervised
     from lightning_pose.utils.device import require_cuda_for_semi_supervised
 
@@ -284,8 +292,15 @@ def get_data_module(
             val_probability=cfg.training.val_prob,
             train_frames=cfg.training.train_frames,
             torch_seed=cfg.training.rng_seed_data_pt,
+            sampling_temperature=sampling_temperature,
+            sampler_frames_override=cfg.training.get('sampler_frames_override', None),
         )
     else:
+        if sampling_temperature is not None and sampling_temperature != 1:
+            raise NotImplementedError(
+                'sampling_temperature is not supported for semi-supervised models: the '
+                'unlabeled video loader has no dataset identity to route by'
+            )
         # Divide config batch_size by num_gpus to maintain the same effective batch
         # size in a multi-gpu setting.
         base_sequence_length = int(

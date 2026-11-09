@@ -1616,3 +1616,31 @@ class TestImgaugHflip:
         assert dm.train_dataset.dataset.imgaug_hflip is True  # type: ignore[union-attr]
         assert dm.val_dataset.dataset.imgaug_hflip is False  # type: ignore[union-attr]
         assert dm.test_dataset.dataset.imgaug_hflip is False  # type: ignore[union-attr]
+
+
+class TestParseDatasetMetadata:
+    """Test the method BaseTrackingDataset._parse_dataset_metadata."""
+
+    def test_parse_dataset_metadata_ids_follow_registry(self):
+        from lightning_pose.data.datasets import BaseTrackingDataset
+
+        names = [
+            'labeled-data/b/s1/img0.png',
+            'labeled-data/a/s2/img1.png',
+            'labeled-data/b/s3/img2.png',
+        ]
+        ids, sessions = BaseTrackingDataset._parse_dataset_metadata(names, ['a', 'b'])
+        assert ids.tolist() == [1, 0, 1]
+        assert sessions == ['b/s1', 'a/s2', 'b/s3']
+
+    def test_parse_dataset_metadata_unknown_dataset(self):
+        from lightning_pose.data.datasets import BaseTrackingDataset
+
+        with pytest.raises(ValueError, match='not in dataset_names'):
+            BaseTrackingDataset._parse_dataset_metadata(['labeled-data/c/s/img.png'], ['a'])
+
+    def test_parse_dataset_metadata_bad_path(self):
+        from lightning_pose.data.datasets import BaseTrackingDataset
+
+        with pytest.raises(ValueError, match='cannot parse dataset identity'):
+            BaseTrackingDataset._parse_dataset_metadata(['labeled-data/a/img.png'], ['a'])
