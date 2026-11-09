@@ -148,13 +148,37 @@ class HeatmapTracker(BaseSupervisedTracker):
         # bounding box coords -> original image coords
         predicted_keypoints = model_to_frame_batch(batch_dict, predicted_keypoints)
         target_keypoints = model_to_frame_batch(batch_dict, batch_dict["keypoints"])
-        return {
+        out: HeatmapTrackerLabeledOutputsDict = {
             "heatmaps_targ": batch_dict["heatmaps"],
             "heatmaps_pred": predicted_heatmaps,
             "keypoints_targ": target_keypoints,
             "keypoints_pred": predicted_keypoints,
             "confidences": confidence,
         }
+        heatmaps_teacher = self._teacher_heatmaps(batch_dict["images"])
+        if heatmaps_teacher is not None:
+            out["heatmaps_teacher"] = heatmaps_teacher
+        return out
+
+    def _teacher_heatmaps(self, images: torch.Tensor) -> torch.Tensor | None:
+        """Heatmaps of the frozen anchor teacher (``model.anchor``), or None without one.
+
+        The teacher is kept outside the module tree (see ``models/factory.py``), so it is moved
+        to the input's device lazily here.
+
+        Args:
+            images: the batch's input images.
+
+        Returns:
+            teacher heatmaps with the student's shape, or None when no teacher is attached.
+        """
+        teacher = self.__dict__.get("_anchor_teacher")
+        if teacher is None:
+            return None
+        if next(teacher.parameters()).device != images.device:
+            teacher.to(images.device)
+        with torch.no_grad():
+            return teacher.forward(images)
 
     def predict_step(
         self,

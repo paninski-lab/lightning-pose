@@ -30,6 +30,7 @@ own ``__call__`` signature, so neither list needs manual upkeep.
 
 from __future__ import annotations
 
+import copy
 import glob
 import inspect
 import logging
@@ -336,5 +337,34 @@ def get_model(
                 if 'backbone' in key:
                     new_state_dict[key] = val
             model.load_state_dict(new_state_dict, strict=False)
+
+    # anchor teacher: a frozen copy of the model as loaded (LoRA adapters are zero at this
+    # point, so the copy computes exactly the trunk). Kept outside the module tree so it is
+    # not a submodule: absent from state_dict/checkpoints, parameters(), and .to(); the
+    # student moves it to its own device lazily in get_loss_inputs_labeled.
+    anchor_cfg = cfg.model.get('anchor', None)
+    if anchor_cfg and data_module is not None:
+        if not cfg.model.get('checkpoint', None):
+            raise ValueError('model.anchor requires model.checkpoint (the teacher weights)')
+        if cfg.model.model_type != 'heatmap':
+            raise ValueError('model.anchor is implemented for single-view heatmap models only')
+        # the loss factories hold the data module (and, for semi-supervised models, a DALI
+        # pipeline that cannot be copied); the teacher only needs weights, so detach them
+        factories = {
+            n: model.__dict__['_modules'].pop(n)
+            for n in ('loss_factory', 'loss_factory_unsup') if n in model.__dict__['_modules']
+        }
+        try:
+            teacher = copy.deepcopy(model)
+        finally:
+            model.__dict__['_modules'].update(factories)
+        teacher.eval()
+        for p_ in teacher.parameters():
+            p_.requires_grad_(False)
+        object.__setattr__(model, '_anchor_teacher', teacher)
+        logger.info(
+            f'anchor: frozen teacher attached (weight {float(anchor_cfg.get("weight", 1.0)):g}, '
+            f'mode {anchor_cfg.get("mode", "unlabeled")})'
+        )
 
     return model

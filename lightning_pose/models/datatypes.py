@@ -10,7 +10,7 @@ produces it, not any single loss that consumes it.
 """
 from __future__ import annotations
 
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 import torch
 from jaxtyping import Float
@@ -45,6 +45,10 @@ class HeatmapTrackerLabeledOutputsDict(TypedDict):
     keypoints_targ: Float[torch.Tensor, "batch num_targets"]
     keypoints_pred: Float[torch.Tensor, "batch num_targets"]
     confidences: Float[torch.Tensor, "batch num_keypoints"]
+    # frozen anchor teacher's heatmaps (model.anchor); absent without a teacher
+    heatmaps_teacher: NotRequired[
+        Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"]
+    ]
 
 
 class HeatmapTrackerUnlabeledOutputsDict(TypedDict):
