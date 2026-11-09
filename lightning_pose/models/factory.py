@@ -308,6 +308,15 @@ def get_model(
 
     model = ModelClass(**common, **extra)
 
+    # LoRA on the backbone: base weights frozen, low-rank adapters trainable. Applied before
+    # checkpoint loading; LoRALinear keeps the weight/bias keys, so the trunk loads unchanged
+    # and the (zero-initialised) adapters are the only new tensors.
+    lora_cfg = cfg.model.get('lora', None)
+    if lora_cfg:
+        from lightning_pose.models.backbones.lora import apply_lora_from_config
+        apply_lora_from_config(model.backbone, lora_cfg)
+        model.lora_lr = float(lora_cfg['lr']) if lora_cfg.get('lr') is not None else None
+
     if cfg.model.get('checkpoint', None):
         ckpt = cfg.model.checkpoint
         logger.info(f'loading weights from {ckpt}')
