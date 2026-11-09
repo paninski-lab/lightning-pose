@@ -50,10 +50,12 @@ from lightning_pose.data.factory import (  # noqa: E402
     get_data_module,
     get_dataset,
     get_imgaug_transform,
+    get_imgaug_transforms_per_dataset,
 )
 
 __all__ = [
     'get_data_module',
     'get_dataset',
     'get_imgaug_transform',
+    'get_imgaug_transforms_per_dataset',
 ]
