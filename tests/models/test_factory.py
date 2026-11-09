@@ -155,10 +155,14 @@ class TestTrackerOutputKeys:
         assert keys == {'keypoints_targ', 'keypoints_pred'}
 
     def test_tracker_output_keys_heatmap_labeled(self):
-        """HeatmapTracker.get_loss_inputs_labeled() produces heatmap and keypoint keys."""
+        """HeatmapTracker.get_loss_inputs_labeled() produces heatmap and keypoint keys.
+
+        ``heatmaps_teacher`` is optional: present only with an anchor teacher (model.anchor).
+        """
         keys = _tracker_output_keys(HeatmapTracker, 'get_loss_inputs_labeled')
         assert keys == {
             'heatmaps_targ', 'heatmaps_pred', 'keypoints_targ', 'keypoints_pred', 'confidences',
+            'heatmaps_teacher',
         }
 
 

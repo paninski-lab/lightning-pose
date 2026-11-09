@@ -199,6 +199,9 @@ def get_context_from_sequence(
 class BaseFeatureExtractor(LightningModule):
     """Object that contains the base resnet feature extractor."""
 
+    # learning rate of the LoRA adapters (model.lora.lr); None = the global rate
+    lora_lr: float | None = None
+
     def __init__(
         self,
         backbone: ALLOWED_BACKBONES = "resnet50",

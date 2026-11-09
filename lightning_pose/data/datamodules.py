@@ -276,11 +276,14 @@ class BaseDataModule(pl.LightningDataModule):
             return
 
         dataset_ids = getattr(self.dataset, 'dataset_ids', None)
-        if dataset_ids is None:
+        dataset_names = getattr(self.dataset, 'dataset_names', None)
+        if dataset_ids is None or dataset_names is None:
             raise ValueError(
                 f'sampling_temperature={T} requires a multi-dataset corpus: set '
                 f'data.dataset_names so per-example dataset ids are available'
             )
+        if self.train_dataset is None:
+            raise RuntimeError('the train/val/test split must exist before the sampler')
 
         train_idxs = list(self.train_dataset.indices)
         train_ids = dataset_ids[train_idxs]
@@ -291,11 +294,10 @@ class BaseDataModule(pl.LightningDataModule):
         if visibility is not None:
             labeled_per_frame = (visibility[train_idxs] == 2).sum(dim=1).double()
         else:
-            labeled_per_frame = (
-                ~torch.isnan(self.dataset.keypoints[train_idxs, :, 0])
-            ).sum(dim=1).double()
+            keypoints = self.dataset.keypoints
+            labeled_per_frame = (~torch.isnan(keypoints[train_idxs, :, 0])).sum(dim=1).double()
 
-        num_datasets = len(self.dataset.dataset_names)  # type: ignore[union-attr]
+        num_datasets = len(dataset_names)
         kbar = torch.zeros(num_datasets, dtype=torch.double)
         for d in range(num_datasets):
             mask = train_ids == d
@@ -305,7 +307,7 @@ class BaseDataModule(pl.LightningDataModule):
         # yields positions within train_dataset (the Subset resolves them to full-dataset rows)
         frames_override = None
         if self.sampler_frames_override:
-            names = list(self.dataset.dataset_names)  # type: ignore[union-attr]
+            names = list(dataset_names)
             unknown = set(self.sampler_frames_override) - set(names)
             if unknown:
                 raise ValueError(f'sampler_frames_override: unknown datasets {sorted(unknown)}')
@@ -328,11 +330,13 @@ class BaseDataModule(pl.LightningDataModule):
         sampler's ``k̄_d``, evaluation) must be reproducible from this manifest alone.
         """
         dataset_ids = getattr(self.dataset, 'dataset_ids', None)
-        if dataset_ids is None:
+        dataset_names = getattr(self.dataset, 'dataset_names', None)
+        if dataset_ids is None or dataset_names is None:
             return None
+        if self.train_dataset is None or self.val_dataset is None or self.test_dataset is None:
+            raise RuntimeError('the train/val/test split must exist before its manifest')
 
         names = self.dataset.image_names
-        dataset_names = self.dataset.dataset_names  # type: ignore[union-attr]
 
         def entry(subset: Subset) -> dict:
             idxs = list(subset.indices)

@@ -481,6 +481,7 @@ class TestGetImgaugTransformsPerDataset:
 
         cfg = self._cfg({'a': 0.5, 'b': [-0.3, 0.6]}, dataset_names=['a', 'b', 'c'])
         pipelines = get_imgaug_transforms_per_dataset(cfg, tmp_path)
+        assert pipelines is not None
         assert set(pipelines) == {'a', 'b'}
 
     def test_get_imgaug_transforms_per_dataset_needs_names(self, tmp_path):

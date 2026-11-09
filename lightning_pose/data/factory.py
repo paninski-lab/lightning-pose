@@ -25,6 +25,7 @@ model-side steps):
 import copy
 import warnings
 from pathlib import Path
+from typing import Any
 
 import imgaug.augmenters as iaa
 import numpy as np
@@ -167,7 +168,10 @@ def get_imgaug_transforms_per_dataset(
     zoom_cfg = cfg.training.get('imgaug_per_dataset_zoom', None)
     if not zoom_cfg:
         return None
-    zoom = OmegaConf.to_object(zoom_cfg) if isinstance(zoom_cfg, DictConfig) else dict(zoom_cfg)
+    zoom_obj = OmegaConf.to_container(zoom_cfg) if isinstance(zoom_cfg, DictConfig) else zoom_cfg
+    if not isinstance(zoom_obj, dict):
+        raise ValueError('training.imgaug_per_dataset_zoom must map dataset names to bounds')
+    zoom: dict[str, Any] = {str(k): v for k, v in zoom_obj.items()}
     dataset_names = cfg.data.get('dataset_names', None)
     if not dataset_names:
         raise ValueError(

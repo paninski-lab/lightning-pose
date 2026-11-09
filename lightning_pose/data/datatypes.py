@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, NotRequired, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 import numpy as np
 import pandas as pd
@@ -109,7 +109,13 @@ class ComputeMetricsSingleResult:
     pca_mv_df: pd.DataFrame | None = None
 
 
-class BaseLabeledExampleDict(TypedDict):
+class _DatasetIdExampleField(TypedDict, total=False):
+    """Optional key: only present in multi-dataset mode (dataset_names given to the dataset)."""
+
+    dataset_id: int
+
+
+class BaseLabeledExampleDict(_DatasetIdExampleField):
     """Return type when calling __getitem__() on BaseTrackingDataset."""
     images: (
         Float[torch.Tensor, "RGB image_height image_width"]
@@ -119,8 +125,6 @@ class BaseLabeledExampleDict(TypedDict):
     bbox: Float[torch.Tensor, "xyhw"]
     idxs: int
     visibility: Int[torch.Tensor, "num_keypoints"]
-    # only present in multi-dataset mode (dataset_names provided to the dataset)
-    dataset_id: NotRequired[int]
 
 
 class HeatmapLabeledExampleDict(BaseLabeledExampleDict):
@@ -162,7 +166,13 @@ class MultiviewHeatmapLabeledExampleDict(MultiviewLabeledExampleDict):
     heatmaps: Float[torch.Tensor, "num_keypoints heatmap_height heatmap_width"]
 
 
-class BaseLabeledBatchDict(TypedDict):
+class _DatasetIdBatchField(TypedDict, total=False):
+    """Optional key: only present in multi-dataset mode (dataset_names given to the dataset)."""
+
+    dataset_id: Int[torch.Tensor, "batch"]
+
+
+class BaseLabeledBatchDict(_DatasetIdBatchField):
     """Batch type for base labeled data."""
     images: (
         Float[torch.Tensor, "batch RGB image_height image_width"]
@@ -171,8 +181,6 @@ class BaseLabeledBatchDict(TypedDict):
     keypoints: Float[torch.Tensor, "batch num_targets"]
     bbox: Float[torch.Tensor, "batch xyhw"]
     idxs: Int[torch.Tensor, "batch"]
-    # only present in multi-dataset mode (dataset_names provided to the dataset)
-    dataset_id: NotRequired[Int[torch.Tensor, "batch"]]
 
 
 class HeatmapLabeledBatchDict(BaseLabeledBatchDict):

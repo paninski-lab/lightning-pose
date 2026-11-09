@@ -352,7 +352,11 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
             the example's source dataset's pipeline when per-dataset pipelines are configured
             and its dataset is listed; otherwise ``self.imgaug_transform``.
         """
-        if self.imgaug_transform_per_dataset is None or self.dataset_ids is None:
+        if (
+            self.imgaug_transform_per_dataset is None
+            or self.dataset_ids is None
+            or self.dataset_names is None
+        ):
             return self.imgaug_transform
         name = self.dataset_names[int(self.dataset_ids[idx])]
         return self.imgaug_transform_per_dataset.get(name, self.imgaug_transform)

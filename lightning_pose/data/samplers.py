@@ -141,7 +141,7 @@ class TemperatureSampler(Sampler[int]):
             f'expected epoch length ~{expected_len:.0f} of {self.num_frames} train frames'
         )
 
-        self._current: list[int] = self._materialize(self._epoch)
+        self._current: list[int] | None = self._materialize(self._epoch)
 
     def _materialize(self, epoch: int) -> list[int]:
         """Generate one full epoch's index sequence, deterministic given (seed, epoch)."""

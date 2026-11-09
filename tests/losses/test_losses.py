@@ -891,4 +891,4 @@ class TestAnchorHeatmapLoss:
         )
         assert torch.isfinite(loss) and loss.item() > 0.0
         with pytest.raises(ValueError, match='anchor mode'):
-            AnchorHeatmapLoss(mode='video')
+            AnchorHeatmapLoss(mode='video')  # pyright: ignore[reportArgumentType]

@@ -8,7 +8,7 @@ import torch
 import torchvision
 from lightning.pytorch import LightningModule, Trainer
 from omegaconf import OmegaConf
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 
 from lightning_pose.models.backbones import ALLOWED_BACKBONES
 from lightning_pose.models.base import (
@@ -330,10 +330,12 @@ class _ScheduleProbe(BaseFeatureExtractor):
             self.weights, ['backbone', 'head', 'lora'], [0.001, 0.01, 0.0001], strict=True,
         )]
 
-    def training_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
+    def training_step(self, batch: list[torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Record the rates used for each update, including accumulated microbatches."""
-        self.trace.append((self.global_step, [g['lr'] for g in self.optimizers().param_groups]))
-        return sum(p.square().sum() for p in self.weights)
+        optimizer = self.optimizers()
+        assert not isinstance(optimizer, list)
+        self.trace.append((self.global_step, [g['lr'] for g in optimizer.param_groups]))
+        return torch.stack([p.square().sum() for p in self.weights]).sum()
 
 
 def _fit_schedule_probe(
@@ -351,7 +353,8 @@ def _fit_schedule_probe(
         accumulate_grad_batches=accumulate, logger=False, enable_checkpointing=False,
         enable_progress_bar=False, enable_model_summary=False, num_sanity_val_steps=0,
     )
-    trainer.fit(model, DataLoader(torch.ones(batches, 1), batch_size=1), ckpt_path=checkpoint)
+    data = DataLoader(TensorDataset(torch.ones(batches, 1)), batch_size=1)
+    trainer.fit(model, data, ckpt_path=checkpoint)
     return trainer
 
 

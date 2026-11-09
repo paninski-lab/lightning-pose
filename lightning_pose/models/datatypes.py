@@ -10,7 +10,7 @@ produces it, not any single loss that consumes it.
 """
 from __future__ import annotations
 
-from typing import NotRequired, TypedDict
+from typing import TypedDict
 
 import torch
 from jaxtyping import Float
@@ -37,7 +37,13 @@ class RegressionTrackerUnlabeledOutputsDict(TypedDict):
     keypoints_pred: Float[torch.Tensor, "seq_len num_targets"]
 
 
-class HeatmapTrackerLabeledOutputsDict(TypedDict):
+class _AnchorTeacherOutputField(TypedDict, total=False):
+    """Optional key: the frozen anchor teacher's heatmaps (model.anchor); absent without one."""
+
+    heatmaps_teacher: Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"]
+
+
+class HeatmapTrackerLabeledOutputsDict(_AnchorTeacherOutputField):
     """Return type of ``HeatmapTracker.get_loss_inputs_labeled()`` and
     ``HeatmapTrackerMHCRNN.get_loss_inputs_labeled()``."""
     heatmaps_targ: Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"]
@@ -45,10 +51,6 @@ class HeatmapTrackerLabeledOutputsDict(TypedDict):
     keypoints_targ: Float[torch.Tensor, "batch num_targets"]
     keypoints_pred: Float[torch.Tensor, "batch num_targets"]
     confidences: Float[torch.Tensor, "batch num_keypoints"]
-    # frozen anchor teacher's heatmaps (model.anchor); absent without a teacher
-    heatmaps_teacher: NotRequired[
-        Float[torch.Tensor, "batch num_keypoints heatmap_height heatmap_width"]
-    ]
 
 
 class HeatmapTrackerUnlabeledOutputsDict(TypedDict):
