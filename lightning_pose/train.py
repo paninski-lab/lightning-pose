@@ -13,6 +13,7 @@ from collections.abc import Generator
 from datetime import datetime
 from pathlib import Path
 
+import imgaug
 import lightning.pytorch as pl
 import numpy as np
 import torch
@@ -288,13 +289,10 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
-    if cfg.training.get('imgaug_seed') is not None:
-        # imgaug keeps its own global RNG; seed it for reproducible augmentation
-        import imgaug
-        imgaug.seed(int(cfg.training.imgaug_seed))
+    # imgaug keeps its own global RNG; seed it for reproducible augmentation
+    imgaug.seed(int(cfg.training.rng_seed_data_pt))
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
-
 
     # record lightning-pose version
     with open_dict(cfg):

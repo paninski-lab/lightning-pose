@@ -40,9 +40,6 @@ The merged CSV lists images as ``labeled-data/<dataset>/<session>/<frame>``.
        the augmentation pipeline with its own ``CropAndPad`` percent range (negative = zoom
        in, positive = zoom out); other datasets use the global pipeline. Needs
        ``data.dataset_names``; single-view models. Not applied to val/test or prediction.
-   * - ``training.imgaug_seed``
-     - ``null``
-     - Seed for imgaug's own random number generator.
 
 Model and optimization
 ======================
