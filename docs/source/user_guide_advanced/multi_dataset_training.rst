@@ -34,10 +34,6 @@ The merged CSV lists images as ``labeled-data/<dataset>/<session>/<frame>``.
        the same share. ``null`` or ``1`` keeps the stock shuffled loader. Needs
        ``data.dataset_names``; supervised models only. Epoch length then varies, so use
        step-based schedules (below).
-   * - ``training.sampler_frames_override``
-     - ``null``
-     - ``{dataset: N}``: compute that dataset's share as if it had ``N`` training frames,
-       while still drawing from all of its frames.
    * - ``training.imgaug_per_dataset_zoom``
      - ``null``
      - ``{dataset: upper}`` or ``{dataset: [lower, upper]}``: that dataset gets its own copy of

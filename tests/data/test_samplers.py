@@ -30,14 +30,6 @@ class TestTemperatureSampler:
         # m = (400, 100) -> p ∝ (20, 10)
         assert sampler.p_d[0] / sampler.p_d[1] == pytest.approx(2.0)
 
-    def test_temperature_sampler_frames_override(self):
-        override = torch.tensor([float('nan'), 400.0])
-        sampler = TemperatureSampler(
-            _ids([400, 100]), torch.tensor([1.0, 1.0]), temperature=2.0, frames_override=override,
-        )
-        assert sampler.p_d[0] == pytest.approx(sampler.p_d[1])
-        assert sampler.n_d.tolist() == [400, 100]
-
     def test_temperature_sampler_deterministic_valid_positions(self):
         ids = _ids([30, 20, 10])
         kbar = torch.tensor([1.0, 2.0, 3.0])

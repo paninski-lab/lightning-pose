@@ -66,7 +66,6 @@ class BaseDataModule(pl.LightningDataModule):
         train_frames: float | int | None = None,
         torch_seed: int = 42,
         sampling_temperature: float | None = None,
-        sampler_frames_override: dict | None = None,
     ) -> None:
         """Data module splits a dataset into train, val, and test data loaders.
 
@@ -89,9 +88,6 @@ class BaseDataModule(pl.LightningDataModule):
                 mass (see :class:`~lightning_pose.data.samplers.TemperatureSampler`).
                 None or 1 keeps the stock shuffled loader; values > 1 require the
                 dataset to carry ``dataset_ids`` (i.e. ``data.dataset_names`` set).
-            sampler_frames_override: optional ``{dataset_name: N}``; the sampler computes that
-                dataset's supervision share as if it had N training frames, while still drawing
-                from all of its frames.
 
         """
         super().__init__()
@@ -117,8 +113,6 @@ class BaseDataModule(pl.LightningDataModule):
         self.test_dataset: Subset | None = None
         self.torch_seed = torch_seed
         self.sampling_temperature = sampling_temperature
-        # {dataset_name: frame count} used only for the sampler's supervision share
-        self.sampler_frames_override = dict(sampler_frames_override or {})
         self.train_sampler = None
         self._setup()
         self._setup_train_sampler()
@@ -310,21 +304,11 @@ class BaseDataModule(pl.LightningDataModule):
                 kbar[d] = labeled_per_frame[mask].mean()
 
         # yields positions within train_dataset (the Subset resolves them to full-dataset rows)
-        frames_override = None
-        if self.sampler_frames_override:
-            names = list(dataset_names)
-            unknown = set(self.sampler_frames_override) - set(names)
-            if unknown:
-                raise ValueError(f'sampler_frames_override: unknown datasets {sorted(unknown)}')
-            frames_override = torch.full((num_datasets,), float('nan'), dtype=torch.double)
-            for name, n in self.sampler_frames_override.items():
-                frames_override[names.index(name)] = float(n)
         self.train_sampler = TemperatureSampler(
             dataset_ids=train_ids,
             kbar=kbar,
             temperature=float(T),
             seed=self.torch_seed,
-            frames_override=frames_override,
         )
 
     def split_manifest(self) -> dict | None:

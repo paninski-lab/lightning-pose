@@ -538,26 +538,9 @@ class TestSetupTrainSampler:
         loader = dm.train_dataloader()
         assert loader.sampler is dm.train_sampler
 
-    def test_setup_train_sampler_frames_override(self):
-        dm = _data_module(
-            _MultiDatasetStub([30, 10]), sampling_temperature=2,
-            sampler_frames_override={'ds1': 100},
-        )
-        assert isinstance(dm.train_sampler, TemperatureSampler)
-        # dataset 1 counted as 100 frames x 2 keypoints
-        n_train0 = split_sizes_from_probabilities(30, 0.8, 0.1, 0.1)[0]
-        mass = np.array([n_train0 * 1.0, 100 * 2.0])
-        expected = np.sqrt(mass) / np.sqrt(mass).sum()
-        assert dm.train_sampler.p_d.tolist() == pytest.approx(expected.tolist())
-
     def test_setup_train_sampler_errors(self):
         with pytest.raises(ValueError, match='requires a multi-dataset corpus'):
             _data_module(_MultiDatasetStub([30], with_ids=False), sampling_temperature=2)
-        with pytest.raises(ValueError, match='unknown datasets'):
-            _data_module(
-                _MultiDatasetStub([30, 10]), sampling_temperature=2,
-                sampler_frames_override={'nope': 5},
-            )
 
 
 class TestSplitManifest:

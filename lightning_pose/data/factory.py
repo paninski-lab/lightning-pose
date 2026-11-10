@@ -401,7 +401,6 @@ def get_data_module(
             train_frames=cfg.training.train_frames,
             torch_seed=cfg.training.rng_seed_data_pt,
             sampling_temperature=sampling_temperature,
-            sampler_frames_override=cfg.training.get('sampler_frames_override', None),
         )
     else:
         if sampling_temperature is not None and sampling_temperature != 1:
