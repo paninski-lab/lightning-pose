@@ -25,7 +25,7 @@ from lightning_pose.models.datatypes import (
     HeatmapTrackerLabeledOutputsDict,
     HeatmapTrackerUnlabeledOutputsDict,
 )
-from lightning_pose.models.heads import HeatmapHead
+from lightning_pose.models.heads import HeatmapHead, HeatmapNonlinearHead
 
 # to ignore imports for sphinx-autoapidoc
 __all__: list[str] = []
@@ -47,7 +47,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         optimizer_params: DictConfig | ListConfig | dict | None = None,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: DictConfig | ListConfig | dict | None = None,
-        head_hidden_channels: int | None = None,
+        head: Literal["heatmap_cnn", "heatmap_cnn_nonlinear"] = "heatmap_cnn",
         **kwargs: Any,
     ) -> None:
         """Initialize a heatmap-based pose estimation model with conv or transformer backbone.
@@ -63,8 +63,10 @@ class HeatmapTracker(BaseSupervisedTracker):
             lr_scheduler: how to schedule learning rate
             lr_scheduler_params: params for specific learning rate schedulers
                 multisteplr: milestones, gamma
-            head_hidden_channels: None = stock linear head; an int makes the head nonlinear
-                (see ``HeatmapHead(hidden_channels=...)``).
+            head: architecture used to project backbone features to 2D heatmaps;
+                ``heatmap_cnn`` is the linear head (:class:`HeatmapHead`),
+                ``heatmap_cnn_nonlinear`` adds a per-pixel MLP readout
+                (:class:`HeatmapNonlinearHead`)
 
         """
 
@@ -89,12 +91,18 @@ class HeatmapTracker(BaseSupervisedTracker):
             self.num_targets = num_targets
         self.downsample_factor = downsample_factor
 
-        self.head = HeatmapHead(
+        # initialize model head
+        if head == "heatmap_cnn":
+            head_class = HeatmapHead
+        elif head == "heatmap_cnn_nonlinear":
+            head_class = HeatmapNonlinearHead
+        else:
+            raise NotImplementedError(f"{head} is not a valid heatmap head")
+        self.head = head_class(
             backbone_arch=backbone,
             in_channels=self.num_fc_input_features,
             out_channels=self.num_keypoints,
             downsample_factor=self.downsample_factor,
-            hidden_channels=head_hidden_channels,
         )
 
         self.loss_factory = loss_factory

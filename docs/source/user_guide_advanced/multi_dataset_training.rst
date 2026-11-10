@@ -51,10 +51,11 @@ Model and optimization
    * - key
      - default
      - what it does
-   * - ``model.head_hidden_channels``
-     - ``null``
-     - An int ``H`` makes the heatmap head nonlinear: the last transposed convolution outputs
-       ``H`` channels, then LayerNorm -> ReLU -> 1x1 convolution to one channel per keypoint.
+   * - ``model.head``
+     - ``heatmap_cnn``
+     - ``heatmap_cnn_nonlinear`` gives the heatmap model a nonlinear head: the last transposed
+       convolution outputs 256 channels, then LayerNorm -> ReLU -> 1x1 convolution to one
+       channel per keypoint. ``heatmap_cnn`` is the stock linear head.
    * - ``training.lr_scheduler_params.multisteplr.milestone_steps``
      - (unset)
      - Learning-rate milestones in optimizer steps, applied every step (no rounding to
@@ -110,7 +111,7 @@ bring every source to the corpus's smallest and largest apparent scales):
       dataset_names: [facemap, ibl, kondo, ...]
     model:
       backbone: vitb_dinov3
-      head_hidden_channels: 256
+      head: heatmap_cnn_nonlinear
     training:
       sampling_temperature: 2
       imgaug_hflip: true

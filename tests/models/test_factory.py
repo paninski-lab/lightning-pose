@@ -16,6 +16,7 @@ from lightning_pose.models.factory import (
     _validate_loss_model_compatibility,
     get_model_class,
 )
+from lightning_pose.models.heads import HeatmapHead, HeatmapNonlinearHead
 
 
 class TestGetModel:
@@ -128,6 +129,25 @@ class TestGetModel:
         for k, v in model.state_dict().items():
             if 'backbone' in k:
                 assert torch.allclose(loaded.state_dict()[k], v), f'backbone mismatch at {k}'
+
+
+class TestHeatmapTrackerHead:
+    """Test the head dispatch of HeatmapTracker."""
+
+    def _tracker(self, **kwargs) -> HeatmapTracker:
+        return HeatmapTracker(num_keypoints=3, backbone='resnet18', pretrained=False, **kwargs)
+
+    def test_heatmap_tracker_head_default_is_linear(self):
+        assert type(self._tracker().head) is HeatmapHead
+
+    def test_heatmap_tracker_head_nonlinear(self):
+        tracker = self._tracker(head='heatmap_cnn_nonlinear')
+        assert isinstance(tracker.head, HeatmapNonlinearHead)
+        assert tracker.head.out_channels == 3
+
+    def test_heatmap_tracker_head_unknown_raises(self):
+        with pytest.raises(NotImplementedError, match='not a valid heatmap head'):
+            self._tracker(head='nope')
 
 
 class TestLossRequiredKeys:

@@ -323,28 +323,3 @@ class TestHeatmapHead:
 
         # ViT should have one fewer layer
         assert len(head_vit.upsampling_layers) == len(head_resnet.upsampling_layers) - 1
-
-    def test_nonlinear_head_shape_and_layers(self):
-        """Test the optional nonlinear readout (hidden_channels)."""
-        from lightning_pose.models.heads.heatmap import LayerNorm2d
-
-        head = HeatmapHead(
-            backbone_arch='vitb_imagenet',
-            in_channels=128,
-            out_channels=17,
-            downsample_factor=2,
-            hidden_channels=32,
-        )
-        linear = HeatmapHead(
-            backbone_arch='vitb_imagenet',
-            in_channels=128,
-            out_channels=17,
-            downsample_factor=2,
-        )
-        layers = list(head.upsampling_layers)
-        assert isinstance(layers[-3], LayerNorm2d)
-        assert isinstance(layers[-2], torch.nn.ReLU)
-        assert isinstance(layers[-1], torch.nn.Conv2d)
-        assert layers[-1].in_channels == 32 and layers[-1].out_channels == 17
-        features = torch.randn(2, 128, 8, 8)
-        assert head(features).shape == linear(features).shape
