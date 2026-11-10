@@ -150,6 +150,41 @@ class TestGetLossFactories:
         assert 'supervised_reprojection_heatmap_mse' not in supervised_keys
 
 
+    def test_get_loss_factories_anchor(self, cfg, base_data_module):
+        """model.anchor adds the anchor heatmap loss with its weight, keypoints and mode."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        cfg_tmp.model.model_type = 'heatmap'
+        names = list(base_data_module.dataset.keypoint_names)
+        cfg_tmp.model.anchor = {
+            'weight': 2.0, 'keypoints': names[1:3], 'mode': 'all', 'conf_power': 1.0,
+        }
+        factories = get_loss_factories(cfg_tmp, data_module=base_data_module)
+        loss = factories['supervised'].loss_instance_dict['anchor_heatmap']
+        assert loss.mode == 'all'
+        assert loss.conf_power == 1.0
+        assert loss.keypoint_idx == [1, 2]
+        # weight relative to the supervised heatmap loss
+        heatmap_loss = factories['supervised'].loss_instance_dict['heatmap_mse']
+        assert float(loss.weight) == pytest.approx(2.0 * float(heatmap_loss.weight))
+
+    def test_get_loss_factories_anchor_errors(self, cfg, base_data_module):
+        """Invalid model.anchor settings raise."""
+        cfg_tmp = copy.deepcopy(cfg)
+        cfg_tmp.model.losses_to_use = []
+        cfg_tmp.model.model_type = 'regression'
+        cfg_tmp.model.anchor = {'weight': 1.0}
+        with pytest.raises(ValueError, match='requires a heatmap model'):
+            get_loss_factories(cfg_tmp, data_module=base_data_module)
+        cfg_tmp.model.model_type = 'heatmap'
+        cfg_tmp.model.anchor = {'weight': 0.0}
+        with pytest.raises(ValueError, match='must be > 0'):
+            get_loss_factories(cfg_tmp, data_module=base_data_module)
+        cfg_tmp.model.anchor = {'keypoints': ['not_a_keypoint']}
+        with pytest.raises(ValueError, match='not in data.keypoint_names'):
+            get_loss_factories(cfg_tmp, data_module=base_data_module)
+
+
 class TestLossFactory:
     """Test the LossFactory class."""
 

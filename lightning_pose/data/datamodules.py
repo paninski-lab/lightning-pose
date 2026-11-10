@@ -294,6 +294,9 @@ class BaseDataModule(pl.LightningDataModule):
         if visibility is not None:
             labeled_per_frame = (visibility[train_idxs] == 2).sum(dim=1).double()
         else:
+            # local import: datasets imports from this package at module level
+            from lightning_pose.data.datasets import MultiviewHeatmapDataset
+
             if isinstance(self.dataset, MultiviewHeatmapDataset):
                 raise ValueError('sampling_temperature supports single-view datasets only')
             keypoints = self.dataset.keypoints
@@ -331,6 +334,9 @@ class BaseDataModule(pl.LightningDataModule):
         exact image names in each split. Downstream consumers (the temperature
         sampler's ``k̄_d``, evaluation) must be reproducible from this manifest alone.
         """
+        # local import: datasets imports from this package at module level
+        from lightning_pose.data.datasets import MultiviewHeatmapDataset
+
         dataset_ids = getattr(self.dataset, 'dataset_ids', None)
         dataset_names = getattr(self.dataset, 'dataset_names', None)
         if (
