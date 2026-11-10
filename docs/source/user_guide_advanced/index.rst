@@ -18,3 +18,4 @@ For each feature, we point out necessary modifications and useful information re
    custom_imgaug_pipeline
    mixed_precision
    increasing_inference_speed
+   multi_dataset_training

@@ -16,6 +16,7 @@ from lightning_pose.models.factory import (
     _validate_loss_model_compatibility,
     get_model_class,
 )
+from lightning_pose.models.heads import HeatmapHead, HeatmapNonlinearHead
 
 
 class TestGetModel:
@@ -130,6 +131,25 @@ class TestGetModel:
                 assert torch.allclose(loaded.state_dict()[k], v), f'backbone mismatch at {k}'
 
 
+class TestHeatmapTrackerHead:
+    """Test the head dispatch of HeatmapTracker."""
+
+    def _tracker(self, **kwargs) -> HeatmapTracker:
+        return HeatmapTracker(num_keypoints=3, backbone='resnet18', pretrained=False, **kwargs)
+
+    def test_heatmap_tracker_head_default_is_linear(self):
+        assert type(self._tracker().head) is HeatmapHead
+
+    def test_heatmap_tracker_head_nonlinear(self):
+        tracker = self._tracker(head='heatmap_cnn_nonlinear')
+        assert isinstance(tracker.head, HeatmapNonlinearHead)
+        assert tracker.head.out_channels == 3
+
+    def test_heatmap_tracker_head_unknown_raises(self):
+        with pytest.raises(NotImplementedError, match='not a valid heatmap head'):
+            self._tracker(head='nope')
+
+
 class TestLossRequiredKeys:
     """Test the _loss_required_keys function."""
 
@@ -155,10 +175,14 @@ class TestTrackerOutputKeys:
         assert keys == {'keypoints_targ', 'keypoints_pred'}
 
     def test_tracker_output_keys_heatmap_labeled(self):
-        """HeatmapTracker.get_loss_inputs_labeled() produces heatmap and keypoint keys."""
+        """HeatmapTracker.get_loss_inputs_labeled() produces heatmap and keypoint keys.
+
+        ``heatmaps_teacher`` is optional: present only with an anchor teacher (model.anchor).
+        """
         keys = _tracker_output_keys(HeatmapTracker, 'get_loss_inputs_labeled')
         assert keys == {
             'heatmaps_targ', 'heatmaps_pred', 'keypoints_targ', 'keypoints_pred', 'confidences',
+            'heatmaps_teacher',
         }
 
 

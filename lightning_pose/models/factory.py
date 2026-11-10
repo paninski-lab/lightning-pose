@@ -30,6 +30,7 @@ own ``__call__`` signature, so neither list needs manual upkeep.
 
 from __future__ import annotations
 
+import copy
 import glob
 import inspect
 import logging
@@ -280,6 +281,7 @@ def get_model(
             num_targets=num_targets,
             downsample_factor=cfg.data.get('downsample_factor', 2),
             backbone_checkpoint=cfg.model.get('backbone_checkpoint'),
+            head=cfg.model.get('head', 'heatmap_cnn'),
         )
     elif cfg.model.model_type == 'heatmap_mhcrnn':
         extra = dict(
@@ -300,6 +302,15 @@ def get_model(
 
     model = ModelClass(**common, **extra)
 
+    # LoRA on the backbone: base weights frozen, low-rank adapters trainable. Applied before
+    # checkpoint loading; LoRALinear keeps the weight/bias keys, so the trunk loads unchanged
+    # and the (zero-initialised) adapters are the only new tensors.
+    lora_cfg = cfg.model.get('lora', None)
+    if lora_cfg:
+        from lightning_pose.models.backbones.lora import apply_lora_from_config
+        apply_lora_from_config(model.backbone, lora_cfg)
+        model.lora_lr = float(lora_cfg['lr']) if lora_cfg.get('lr') is not None else None
+
     if cfg.model.get('checkpoint', None):
         ckpt = cfg.model.checkpoint
         logger.info(f'loading weights from {ckpt}')
@@ -319,5 +330,34 @@ def get_model(
                 if 'backbone' in key:
                     new_state_dict[key] = val
             model.load_state_dict(new_state_dict, strict=False)
+
+    # anchor teacher: a frozen copy of the model as loaded (LoRA adapters are zero at this
+    # point, so the copy computes exactly the trunk). Kept outside the module tree so it is
+    # not a submodule: absent from state_dict/checkpoints, parameters(), and .to(); the
+    # student moves it to its own device lazily in get_loss_inputs_labeled.
+    anchor_cfg = cfg.model.get('anchor', None)
+    if anchor_cfg and data_module is not None:
+        if not cfg.model.get('checkpoint', None):
+            raise ValueError('model.anchor requires model.checkpoint (the teacher weights)')
+        if cfg.model.model_type != 'heatmap':
+            raise ValueError('model.anchor is implemented for single-view heatmap models only')
+        # the loss factories hold the data module (and, for semi-supervised models, a DALI
+        # pipeline that cannot be copied); the teacher only needs weights, so detach them
+        factories = {
+            n: model.__dict__['_modules'].pop(n)
+            for n in ('loss_factory', 'loss_factory_unsup') if n in model.__dict__['_modules']
+        }
+        try:
+            teacher = copy.deepcopy(model)
+        finally:
+            model.__dict__['_modules'].update(factories)
+        teacher.eval()
+        for p_ in teacher.parameters():
+            p_.requires_grad_(False)
+        object.__setattr__(model, '_anchor_teacher', teacher)
+        logger.info(
+            f'anchor: frozen teacher attached (weight {float(anchor_cfg.get("weight", 1.0)):g}, '
+            f'mode {anchor_cfg.get("mode", "unlabeled")})'
+        )
 
     return model

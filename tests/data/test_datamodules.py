@@ -4,8 +4,13 @@ from collections.abc import Sized
 
 import numpy as np
 import pytest
+import torch
 from lightning.pytorch.utilities import CombinedLoader
-from torch.utils.data import RandomSampler
+from torch.utils.data import RandomSampler, TensorDataset
+
+from lightning_pose.data.datamodules import BaseDataModule
+from lightning_pose.data.samplers import TemperatureSampler
+from lightning_pose.data.utils import split_sizes_from_probabilities
 
 
 def test_base_datamodule(cfg, base_data_module):
@@ -429,3 +434,124 @@ def test_multiview_heatmap_data_module_combined_context(
     )
     assert batch["unlabeled"]["transforms"].shape == (num_views, 1, 2, 3)
     assert batch["unlabeled"]["bbox"].shape == (train_size_unlabeled, num_views * 4)
+
+
+class _MultiDatasetStub(torch.utils.data.Dataset):
+    """Minimal labeled dataset with per-example dataset ids (no images, no augmentation)."""
+
+    def __init__(
+        self,
+        frames_per_dataset: list[int],
+        with_ids: bool = True,
+        with_visibility: bool = True,
+    ) -> None:
+        n = sum(frames_per_dataset)
+        self.dataset_names = [f'ds{i}' for i in range(len(frames_per_dataset))]
+        self.dataset_ids = (
+            torch.cat([torch.full((c,), i) for i, c in enumerate(frames_per_dataset)])
+            if with_ids else None
+        )
+        self.image_names = [f'labeled-data/img{i:03d}.png' for i in range(n)]
+        # dataset i labels i + 1 of its 3 keypoints in every frame
+        visibility = torch.zeros(n, 3, dtype=torch.long)
+        keypoints = torch.full((n, 3, 2), float('nan'))
+        for i in range(len(frames_per_dataset)):
+            rows = self.dataset_ids == i if with_ids else torch.ones(n, dtype=torch.bool)
+            visibility[rows, : i + 1] = 2
+            keypoints[rows, : i + 1] = 1.0
+        self.visibility = visibility if with_visibility else None
+        self.keypoints = keypoints
+        self.imgaug_transform = [object()]   # resize only: the shared-subset path
+        self.imgaug_hflip = False
+
+    def __len__(self) -> int:
+        return len(self.image_names)
+
+    def __getitem__(self, idx: int) -> torch.Tensor:
+        return torch.tensor(idx)
+
+
+def _indices(subset: torch.utils.data.Subset | None) -> list[int]:
+    assert subset is not None
+    return list(subset.indices)
+
+
+def _data_module(dataset: _MultiDatasetStub, **kwargs) -> BaseDataModule:
+    return BaseDataModule(
+        dataset=dataset,  # type: ignore[arg-type]
+        num_workers=0,
+        train_probability=0.8,
+        val_probability=0.1,
+        test_probability=0.1,
+        **kwargs,
+    )
+
+
+class TestSplitIndices:
+    """Test the method BaseDataModule._split_indices."""
+
+    def test_split_indices_stratified_by_dataset(self):
+        dataset = _MultiDatasetStub([100, 20])
+        dm = _data_module(dataset)
+        ids = dataset.dataset_ids
+        assert ids is not None
+        # the split proportions are applied within each source dataset
+        sizes = [split_sizes_from_probabilities(n, 0.8, 0.1, 0.1) for n in (100, 20)]
+        for split, subset in enumerate([dm.train_dataset, dm.val_dataset, dm.test_dataset]):
+            counts = torch.bincount(ids[_indices(subset)], minlength=2).tolist()
+            assert counts == [sizes[0][split], sizes[1][split]]
+        all_idxs = _indices(dm.train_dataset) + _indices(dm.val_dataset)
+        all_idxs += _indices(dm.test_dataset)
+        assert sorted(all_idxs) == list(range(120))
+
+    def test_split_indices_without_ids_matches_random_split(self):
+        dm = _data_module(_MultiDatasetStub([50], with_ids=False))
+        expected = torch.utils.data.random_split(
+            TensorDataset(torch.arange(50)), [40, 5, 5],
+            generator=torch.Generator().manual_seed(42),
+        )
+        assert _indices(dm.train_dataset) == list(expected[0].indices)
+        assert dm.split_manifest() is None
+
+
+class TestSetupTrainSampler:
+    """Test the method BaseDataModule._setup_train_sampler."""
+
+    @pytest.mark.parametrize('temperature', [None, 1])
+    def test_setup_train_sampler_off(self, temperature):
+        dm = _data_module(_MultiDatasetStub([30, 10]), sampling_temperature=temperature)
+        assert dm.train_sampler is None
+        assert isinstance(dm.train_dataloader().sampler, RandomSampler)
+
+    @pytest.mark.parametrize('with_visibility', [True, False])
+    def test_setup_train_sampler_temperature(self, with_visibility):
+        dataset = _MultiDatasetStub([30, 10], with_visibility=with_visibility)
+        dm = _data_module(dataset, sampling_temperature=2)
+        assert isinstance(dm.train_sampler, TemperatureSampler)
+        n_train = [split_sizes_from_probabilities(n, 0.8, 0.1, 0.1)[0] for n in (30, 10)]
+        assert dm.train_sampler.n_d.tolist() == n_train
+        # supervision mass n_d * kbar_d (dataset 0 labels 1 keypoint per frame, dataset 1 two),
+        # shares proportional to its square root at T = 2
+        mass = np.array([n_train[0] * 1.0, n_train[1] * 2.0])
+        expected = np.sqrt(mass) / np.sqrt(mass).sum()
+        assert dm.train_sampler.p_d.tolist() == pytest.approx(expected.tolist())
+        loader = dm.train_dataloader()
+        assert loader.sampler is dm.train_sampler
+
+    def test_setup_train_sampler_errors(self):
+        with pytest.raises(ValueError, match='requires a multi-dataset corpus'):
+            _data_module(_MultiDatasetStub([30], with_ids=False), sampling_temperature=2)
+
+
+class TestSplitManifest:
+    """Test the method BaseDataModule.split_manifest."""
+
+    def test_split_manifest_counts_and_names(self):
+        dm = _data_module(_MultiDatasetStub([100, 20]))
+        manifest = dm.split_manifest()
+        assert manifest is not None
+        assert manifest['dataset_names'] == ['ds0', 'ds1']
+        sizes = [split_sizes_from_probabilities(n, 0.8, 0.1, 0.1) for n in (100, 20)]
+        assert manifest['train']['per_dataset'] == {'ds0': sizes[0][0], 'ds1': sizes[1][0]}
+        assert manifest['val']['n'] == sizes[0][1] + sizes[1][1]
+        assert len(manifest['test']['image_names']) == manifest['test']['n']

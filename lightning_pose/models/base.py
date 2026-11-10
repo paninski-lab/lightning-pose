@@ -199,6 +199,9 @@ def get_context_from_sequence(
 class BaseFeatureExtractor(LightningModule):
     """Object that contains the base resnet feature extractor."""
 
+    # learning rate of the LoRA adapters (model.lora.lr); None = the global rate
+    lora_lr: float | None = None
+
     def __init__(
         self,
         backbone: ALLOWED_BACKBONES = "resnet50",
@@ -439,7 +442,12 @@ class BaseFeatureExtractor(LightningModule):
         if self.lr_scheduler not in ("multistep_lr", "multisteplr"):
             raise LrNotImplementedError(self.lr_scheduler)
         # define a scheduler that reduces the base learning rate
-        milestones = self.lr_scheduler_params.milestones
+        # saved historical configs may also contain derived epoch milestones;
+        # explicit optimizer-step milestones take precedence, including an empty list.
+        if 'milestone_steps' in self.lr_scheduler_params:
+            milestones = self.lr_scheduler_params.milestone_steps
+        else:
+            milestones = self.lr_scheduler_params.milestones
         gamma = self.lr_scheduler_params.gamma
 
         scheduler = MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
@@ -474,7 +482,11 @@ class BaseFeatureExtractor(LightningModule):
 
         return {
             "optimizer": optimizer,
-            "lr_scheduler": scheduler,
+            "lr_scheduler": {
+                'scheduler': scheduler,
+                'interval': 'step' if 'milestone_steps' in self.lr_scheduler_params else 'epoch',
+                'frequency': 1,
+            },
             "monitor": "val_supervised_loss",
         }
 

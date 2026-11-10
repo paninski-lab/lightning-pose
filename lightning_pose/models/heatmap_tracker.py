@@ -25,7 +25,7 @@ from lightning_pose.models.datatypes import (
     HeatmapTrackerLabeledOutputsDict,
     HeatmapTrackerUnlabeledOutputsDict,
 )
-from lightning_pose.models.heads import HeatmapHead
+from lightning_pose.models.heads import HeatmapHead, HeatmapNonlinearHead
 
 # to ignore imports for sphinx-autoapidoc
 __all__: list[str] = []
@@ -47,6 +47,7 @@ class HeatmapTracker(BaseSupervisedTracker):
         optimizer_params: DictConfig | ListConfig | dict | None = None,
         lr_scheduler: str = "multisteplr",
         lr_scheduler_params: DictConfig | ListConfig | dict | None = None,
+        head: Literal["heatmap_cnn", "heatmap_cnn_nonlinear"] = "heatmap_cnn",
         **kwargs: Any,
     ) -> None:
         """Initialize a heatmap-based pose estimation model with conv or transformer backbone.
@@ -62,6 +63,10 @@ class HeatmapTracker(BaseSupervisedTracker):
             lr_scheduler: how to schedule learning rate
             lr_scheduler_params: params for specific learning rate schedulers
                 multisteplr: milestones, gamma
+            head: architecture used to project backbone features to 2D heatmaps;
+                ``heatmap_cnn`` is the linear head (:class:`HeatmapHead`),
+                ``heatmap_cnn_nonlinear`` adds a per-pixel MLP readout
+                (:class:`HeatmapNonlinearHead`)
 
         """
 
@@ -86,7 +91,14 @@ class HeatmapTracker(BaseSupervisedTracker):
             self.num_targets = num_targets
         self.downsample_factor = downsample_factor
 
-        self.head = HeatmapHead(
+        # initialize model head
+        if head == "heatmap_cnn":
+            head_class = HeatmapHead
+        elif head == "heatmap_cnn_nonlinear":
+            head_class = HeatmapNonlinearHead
+        else:
+            raise NotImplementedError(f"{head} is not a valid heatmap head")
+        self.head = head_class(
             backbone_arch=backbone,
             in_channels=self.num_fc_input_features,
             out_channels=self.num_keypoints,
@@ -144,13 +156,37 @@ class HeatmapTracker(BaseSupervisedTracker):
         # bounding box coords -> original image coords
         predicted_keypoints = model_to_frame_batch(batch_dict, predicted_keypoints)
         target_keypoints = model_to_frame_batch(batch_dict, batch_dict["keypoints"])
-        return {
+        out: HeatmapTrackerLabeledOutputsDict = {
             "heatmaps_targ": batch_dict["heatmaps"],
             "heatmaps_pred": predicted_heatmaps,
             "keypoints_targ": target_keypoints,
             "keypoints_pred": predicted_keypoints,
             "confidences": confidence,
         }
+        heatmaps_teacher = self._teacher_heatmaps(batch_dict["images"])
+        if heatmaps_teacher is not None:
+            out["heatmaps_teacher"] = heatmaps_teacher
+        return out
+
+    def _teacher_heatmaps(self, images: torch.Tensor) -> torch.Tensor | None:
+        """Heatmaps of the frozen anchor teacher (``model.anchor``), or None without one.
+
+        The teacher is kept outside the module tree (see ``models/factory.py``), so it is moved
+        to the input's device lazily here.
+
+        Args:
+            images: the batch's input images.
+
+        Returns:
+            teacher heatmaps with the student's shape, or None when no teacher is attached.
+        """
+        teacher = self.__dict__.get("_anchor_teacher")
+        if teacher is None:
+            return None
+        if next(teacher.parameters()).device != images.device:
+            teacher.to(images.device)
+        with torch.no_grad():
+            return teacher.forward(images)
 
     def predict_step(
         self,
@@ -196,12 +232,27 @@ class HeatmapTracker(BaseSupervisedTracker):
         Returns:
             List of dicts with ``"params"``, ``"name"``, and optionally ``"lr"`` keys; the
             backbone starts with learning rate 0 (frozen until unfreezing). Order matters:
-            ``UnfreezeBackbone`` requires group 0 to be backbone and group 1 to be head.
+            ``UnfreezeBackbone`` requires group 0 to be backbone and group 1 to be head. With
+            LoRA (``model.lora``) a third group holds the adapters, trained from the start.
         """
+        from lightning_pose.models.backbones.lora import lora_parameters
+        lora = list(lora_parameters(self.backbone))
+        lora_ids = {id(p) for p in lora}
         params = [
-            {"params": self.backbone.parameters(), "lr": 0, "name": "backbone"},
+            {
+                "params": [p for p in self.backbone.parameters() if id(p) not in lora_ids],
+                "lr": 0,
+                "name": "backbone",
+            },
             {"params": self.head.parameters(), "name": "head"},
         ]
+        if lora:
+            # third group: trained from step 1 at its own lr (default: the global lr); the
+            # unfreeze callback only ramps group 0, which now holds the frozen base weights
+            group = {"params": lora, "name": "lora"}
+            if self.lora_lr is not None:
+                group["lr"] = self.lora_lr
+            params.append(group)
         return params
 
 

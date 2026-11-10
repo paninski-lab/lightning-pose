@@ -335,6 +335,95 @@ class HeatmapMSELoss(HeatmapLoss):
         return loss
 
 
+class AnchorHeatmapLoss(Loss):
+    """Distill a frozen teacher's heatmaps into channels that carry no label in a frame.
+
+    Fine-tuning a multi-dataset trunk on a new dataset gives a gradient only to the
+    keypoints that dataset labels; the trunk's knowledge of every other keypoint (the ones a
+    lab gets "for free") drifts with the shared features. This loss keeps those channels
+    anchored to the trunk's own predictions on the fine-tuning images: an MSE between the
+    student's and the teacher's heatmaps, restricted to ``keypoint_idx`` (the channels the
+    teacher actually trained) and, in ``mode='unlabeled'``, to channels whose target heatmap
+    is empty in that frame. Labeled channels keep their supervised loss untouched.
+    """
+
+    loss_name = 'anchor_heatmap'
+
+    def __init__(
+        self,
+        data_module: BaseDataModule | UnlabeledDataModule | None = None,
+        log_weight: float = 0.0,
+        keypoint_idx: list[int] | None = None,
+        mode: Literal['unlabeled', 'all'] = 'unlabeled',
+        conf_power: float = 0.0,
+        **kwargs: Any,
+    ) -> None:
+        """Initialize AnchorHeatmapLoss.
+
+        Args:
+            data_module: unused; kept for factory compatibility.
+            log_weight: final weight is ``1 / (2 * exp(log_weight))``; ``-log(w)`` gives the
+                anchor term weight ``w`` relative to the supervised heatmap loss.
+            keypoint_idx: channels eligible for anchoring (the teacher's trained keypoints);
+                ``None`` means every channel.
+            mode: ``'unlabeled'`` anchors only channels with an empty target heatmap in the
+                frame; ``'all'`` anchors every eligible channel regardless of labels.
+            conf_power: weight each (frame, channel) term by the teacher's heatmap peak raised
+                to this power, normalized over the anchored set — channels the teacher cannot
+                see (out of view, occluded) then contribute ~nothing. ``0`` = uniform weights.
+        """
+        super().__init__(data_module=data_module, log_weight=log_weight)
+        self.keypoint_idx = sorted(set(int(i) for i in keypoint_idx)) if keypoint_idx else None
+        if mode not in ('unlabeled', 'all'):
+            raise ValueError(f"anchor mode must be 'unlabeled' or 'all', got '{mode}'")
+        self.mode = mode
+        self.conf_power = float(conf_power)
+
+    def __call__(
+        self,
+        heatmaps_pred: Float[torch.Tensor, 'batch num_keypoints heatmap_height heatmap_width'],
+        heatmaps_targ: (
+            Float[torch.Tensor, 'batch num_keypoints heatmap_height heatmap_width'] | None
+        ) = None,
+        heatmaps_teacher: (
+            Float[torch.Tensor, 'batch num_keypoints heatmap_height heatmap_width'] | None
+        ) = None,
+        stage: Literal['train', 'val', 'test'] | None = None,
+        **kwargs: Any,
+    ) -> tuple[Float[torch.Tensor, ''], list[dict]]:
+        """Compute the anchor loss; zero when no teacher heatmaps or no eligible channel.
+
+        ``heatmaps_targ`` is ``None`` for unlabeled (video) batches: every eligible channel is
+        then anchored, which is the self-training use of the loss.
+        """
+        if heatmaps_teacher is None:
+            loss = heatmaps_pred.sum() * 0.0
+            return loss, self.log_loss(loss=loss, stage=stage)
+        b, k, h, w = heatmaps_pred.shape
+        mask = torch.zeros(b, k, dtype=torch.bool, device=heatmaps_pred.device)
+        if self.keypoint_idx is None:
+            mask[:] = True
+        else:
+            mask[:, self.keypoint_idx] = True
+        if self.mode == 'unlabeled' and heatmaps_targ is not None:
+            unlabeled = torch.all(heatmaps_targ.reshape(b, k, -1) == 0.0, dim=-1)
+            mask = mask & unlabeled
+        if not bool(mask.any()):
+            loss = heatmaps_pred.sum() * 0.0
+        else:
+            teacher = heatmaps_teacher[mask].detach()
+            elementwise = F.mse_loss(heatmaps_pred[mask], teacher, reduction='none') * h * w
+            if self.conf_power > 0:
+                # per-(frame, channel) weight from the teacher's peak, normalized to mean 1
+                conf = teacher.reshape(teacher.shape[0], -1).amax(dim=-1).clamp(min=0.0)
+                wts = conf.pow(self.conf_power)
+                wts = wts / wts.mean().clamp(min=1e-8)
+                loss = (elementwise.mean(dim=(1, 2)) * wts).mean()
+            else:
+                loss = self.reduce_loss(elementwise, method='mean')
+        return loss, self.log_loss(loss=loss, stage=stage)
+
+
 class HeatmapKLLoss(HeatmapLoss):
     """Kullback-Leibler loss between heatmaps."""
 

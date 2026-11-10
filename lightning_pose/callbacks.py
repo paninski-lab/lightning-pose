@@ -103,6 +103,7 @@ class UnfreezeBackbone(Callback):
         unfreeze_step: int | None = None,
         initial_ratio: float = 0.1,
         warm_up_ratio: float = 1.5,
+        warmup_steps: int | None = None,
     ) -> None:
         """Initialize UnfreezeBackbone callback.
 
@@ -113,6 +114,10 @@ class UnfreezeBackbone(Callback):
             unfreeze_step: global step at which to begin unfreezing the backbone.
             initial_ratio: backbone LR starts at ``initial_ratio * upsampling_lr``.
             warm_up_ratio: backbone LR is multiplied by this factor each epoch/step during warm-up.
+            warmup_steps: with ``unfreeze_step`` only: ramp the backbone LR LINEARLY from
+                ``initial_ratio * upsampling_lr`` to ``upsampling_lr`` over this many steps
+                instead of the geometric ``warm_up_ratio`` ramp (x1.5 per STEP reaches full LR
+                in ~6 steps, which collapsed ViT-B runs at unfreeze)
         """
         assert (unfreeze_epoch is None) != (
             unfreeze_step is None
@@ -121,6 +126,9 @@ class UnfreezeBackbone(Callback):
         self.unfreeze_step = unfreeze_step
         self.initial_ratio = initial_ratio
         self.warm_up_ratio = warm_up_ratio
+        if warmup_steps is not None and unfreeze_step is None:
+            raise ValueError('warmup_steps needs unfreeze_step (a step-based schedule)')
+        self.warmup_steps = warmup_steps
         self._warmed_up = False
 
     def on_train_batch_start(
@@ -183,6 +191,13 @@ class UnfreezeBackbone(Callback):
             self._initial_lr = self.initial_ratio * upsampling_lr
             return self._initial_lr
 
+        # Linear warm-up (warmup_steps, step mode only): initial_ratio -> 1 over warmup_steps.
+        elif self.warmup_steps:
+            frac = min((current_epoch - unfreeze_epoch) / self.warmup_steps, 1.0)
+            if frac >= 1.0:
+                self._warmed_up = True
+                return upsampling_lr
+            return upsampling_lr * (self.initial_ratio + frac * (1 - self.initial_ratio))
         # Warm up: compute inital_ratio * epoch_ratio ** epochs_since_thaw.
         # Use stored initial_ratio rather than recomputing it since
         # upsampling_lr is subject to change via the scheduler.
@@ -679,6 +694,7 @@ def get_callbacks(
         unfreeze_epoch = cfg.training.get('unfreezing_epoch')
         unfreeze_backbone_callback = UnfreezeBackbone(
             unfreeze_step=unfreeze_step, unfreeze_epoch=unfreeze_epoch,
+            warmup_steps=cfg.training.get('unfreeze_warmup_steps'),
         )
         callbacks.append(unfreeze_backbone_callback)
 

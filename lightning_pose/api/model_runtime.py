@@ -174,6 +174,21 @@ def load_model_from_checkpoint(
         import os
         os.unlink(fixed_ckpt_file)
 
+    # LoRA checkpoints: load_from_checkpoint builds the plain model, so the adapter tensors
+    # (lora_A/lora_B) are silently dropped by strict=False. Rebuild the adapters exactly as
+    # the model factory did, then load again so every adapter weight lands.
+    lora_cfg = cfg.model.get('lora', None)
+    has_lora_keys = any('.lora_A' in k for k in state_dict)
+    if lora_cfg:
+        from lightning_pose.models.backbones.lora import apply_lora_from_config
+        apply_lora_from_config(model.backbone, lora_cfg)
+        model.load_state_dict(state_dict, strict=False)
+    elif has_lora_keys:
+        raise RuntimeError(
+            'checkpoint contains LoRA adapter weights but the config has no model.lora block; '
+            'loading it would silently drop the adapters'
+        )
+
     if eval:
         model.eval()
 

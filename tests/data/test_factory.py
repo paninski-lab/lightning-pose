@@ -454,3 +454,50 @@ class TestGetDataset:
         mocker.patch('lightning_pose.data.factory.has_calibration_files', return_value=True)
         get_dataset(cfg_tmp, data_dir=toy_mdata_dir, imgaug_transform=imgaug_transform)
         assert mock_init.call_args.kwargs.get('resize') is False
+
+
+class TestGetImgaugTransformsPerDataset:
+    """Test the function get_imgaug_transforms_per_dataset."""
+
+    @staticmethod
+    def _cfg(zoom: dict | None, dataset_names: list[str] | None = None):
+        return OmegaConf.create({
+            'data': {'dataset_names': dataset_names},
+            'model': {'model_type': 'heatmap'},
+            'training': {
+                'imgaug': {'CropAndPad': {'p': 0.4, 'kwargs': {'percent': [-0.15, 0.2]}}},
+                'imgaug_per_dataset_zoom': zoom,
+            },
+        })
+
+
+    def test_get_imgaug_transforms_per_dataset_off(self, tmp_path):
+        from lightning_pose.data.factory import get_imgaug_transforms_per_dataset
+
+        assert get_imgaug_transforms_per_dataset(self._cfg(None), tmp_path) is None
+
+    def test_get_imgaug_transforms_per_dataset_builds_listed_only(self, tmp_path):
+        from lightning_pose.data.factory import get_imgaug_transforms_per_dataset
+
+        cfg = self._cfg({'a': 0.5, 'b': [-0.3, 0.6]}, dataset_names=['a', 'b', 'c'])
+        pipelines = get_imgaug_transforms_per_dataset(cfg, tmp_path)
+        assert pipelines is not None
+        assert set(pipelines) == {'a', 'b'}
+
+    def test_get_imgaug_transforms_per_dataset_needs_names(self, tmp_path):
+        from lightning_pose.data.factory import get_imgaug_transforms_per_dataset
+
+        with pytest.raises(ValueError, match='requires data.dataset_names'):
+            get_imgaug_transforms_per_dataset(self._cfg({'a': 0.5}), tmp_path)
+
+    def test_get_imgaug_transforms_per_dataset_unknown_name(self, tmp_path):
+        from lightning_pose.data.factory import get_imgaug_transforms_per_dataset
+
+        with pytest.raises(ValueError, match='not present in'):
+            get_imgaug_transforms_per_dataset(self._cfg({'z': 0.5}, ['a']), tmp_path)
+
+    def test_get_imgaug_transforms_per_dataset_bad_bounds(self, tmp_path):
+        from lightning_pose.data.factory import get_imgaug_transforms_per_dataset
+
+        with pytest.raises(ValueError, match='must exceed'):
+            get_imgaug_transforms_per_dataset(self._cfg({'a': -0.5}, ['a']), tmp_path)

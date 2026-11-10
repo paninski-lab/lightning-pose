@@ -838,3 +838,57 @@ class TestReprojectionHeatmapLoss:
         expected_loss = (predictions - targets) ** 2 * 32 * 32
         assert torch.allclose(elementwise_loss, expected_loss)
         assert elementwise_loss.shape == targets.shape
+
+
+class TestAnchorHeatmapLoss:
+    """Test the class AnchorHeatmapLoss."""
+
+    @staticmethod
+    def _maps(b: int = 2, k: int = 3, h: int = 4, w: int = 4) -> tuple:
+        pred = torch.rand(b, k, h, w)
+        teacher = torch.rand(b, k, h, w)
+        targ = torch.zeros(b, k, h, w)
+        targ[:, 0] = 1.0 / (h * w)  # channel 0 labelled in every frame
+        return pred, targ, teacher
+
+    def test_anchor_heatmap_loss_zero_without_teacher(self):
+        from lightning_pose.losses.losses import AnchorHeatmapLoss
+
+        pred, targ, _ = self._maps()
+        loss, _ = AnchorHeatmapLoss()(heatmaps_pred=pred, heatmaps_targ=targ)
+        assert loss.item() == 0.0
+
+    def test_anchor_heatmap_loss_unlabeled_mode_skips_labelled(self):
+        from lightning_pose.losses.losses import AnchorHeatmapLoss
+
+        pred, targ, teacher = self._maps()
+        teacher[:, 1:] = pred[:, 1:]  # teacher == student on every unlabelled channel
+        loss, _ = AnchorHeatmapLoss(mode='unlabeled')(
+            heatmaps_pred=pred, heatmaps_targ=targ, heatmaps_teacher=teacher,
+        )
+        assert loss.item() == pytest.approx(0.0)
+        loss_all, _ = AnchorHeatmapLoss(mode='all')(
+            heatmaps_pred=pred, heatmaps_targ=targ, heatmaps_teacher=teacher,
+        )
+        assert loss_all.item() > 0.0
+
+    def test_anchor_heatmap_loss_keypoint_idx(self):
+        from lightning_pose.losses.losses import AnchorHeatmapLoss
+
+        pred, targ, teacher = self._maps()
+        teacher[:, 2] = pred[:, 2]
+        loss, _ = AnchorHeatmapLoss(keypoint_idx=[2])(
+            heatmaps_pred=pred, heatmaps_targ=targ, heatmaps_teacher=teacher,
+        )
+        assert loss.item() == pytest.approx(0.0)
+
+    def test_anchor_heatmap_loss_conf_power_and_bad_mode(self):
+        from lightning_pose.losses.losses import AnchorHeatmapLoss
+
+        pred, targ, teacher = self._maps()
+        loss, _ = AnchorHeatmapLoss(conf_power=2.0)(
+            heatmaps_pred=pred, heatmaps_targ=targ, heatmaps_teacher=teacher,
+        )
+        assert torch.isfinite(loss) and loss.item() > 0.0
+        with pytest.raises(ValueError, match='anchor mode'):
+            AnchorHeatmapLoss(mode='video')  # pyright: ignore[reportArgumentType]

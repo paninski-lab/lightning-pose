@@ -109,7 +109,13 @@ class ComputeMetricsSingleResult:
     pca_mv_df: pd.DataFrame | None = None
 
 
-class BaseLabeledExampleDict(TypedDict):
+class _DatasetIdExampleField(TypedDict, total=False):
+    """Optional key: only present in multi-dataset mode (dataset_names given to the dataset)."""
+
+    dataset_id: int
+
+
+class BaseLabeledExampleDict(_DatasetIdExampleField):
     """Return type when calling __getitem__() on BaseTrackingDataset."""
     images: (
         Float[torch.Tensor, "RGB image_height image_width"]
@@ -160,7 +166,13 @@ class MultiviewHeatmapLabeledExampleDict(MultiviewLabeledExampleDict):
     heatmaps: Float[torch.Tensor, "num_keypoints heatmap_height heatmap_width"]
 
 
-class BaseLabeledBatchDict(TypedDict):
+class _DatasetIdBatchField(TypedDict, total=False):
+    """Optional key: only present in multi-dataset mode (dataset_names given to the dataset)."""
+
+    dataset_id: Int[torch.Tensor, "batch"]
+
+
+class BaseLabeledBatchDict(_DatasetIdBatchField):
     """Batch type for base labeled data."""
     images: (
         Float[torch.Tensor, "batch RGB image_height image_width"]

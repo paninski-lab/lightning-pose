@@ -13,6 +13,7 @@ from collections.abc import Generator
 from datetime import datetime
 from pathlib import Path
 
+import imgaug
 import lightning.pytorch as pl
 import numpy as np
 import torch
@@ -288,6 +289,8 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
+    # imgaug keeps its own global RNG; seed it for reproducible augmentation
+    imgaug.seed(int(cfg.training.rng_seed_data_pt))
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
@@ -322,16 +325,6 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
 
     steps_per_epoch = calculate_steps_per_epoch(data_module)
 
-    # convert milestone_steps to milestones if applicable (before `get_model`).
-    if (
-        "multisteplr" in cfg.training.lr_scheduler_params
-        and "milestone_steps" in cfg.training.lr_scheduler_params.multisteplr
-    ):
-        milestone_steps = cfg.training.lr_scheduler_params.multisteplr.milestone_steps
-        milestones = [math.ceil(s / steps_per_epoch) for s in milestone_steps]
-        with open_dict(cfg):
-            cfg.training.lr_scheduler_params.multisteplr.milestones = milestones
-
     # convert patch masking epochs if applicable (before `get_callbacks`)
     if "patch_mask" in cfg.training and "init_epoch" in cfg.training.patch_mask:
         init_step = math.ceil(cfg.training.patch_mask.init_epoch * steps_per_epoch)
@@ -353,6 +346,14 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
     # save config file
     dest_config_file = Path(hydra_output_directory) / "config.yaml"
     OmegaConf.save(config=cfg, f=dest_config_file, resolve=False)
+
+    # save train/val split manifest for multi-dataset runs; downstream consumers
+    # (temperature sampler, evaluation) must be reproducible from this file alone
+    split_manifest = getattr(data_module, 'split_manifest', lambda: None)()
+    if split_manifest is not None:
+        dest_manifest_file = Path(hydra_output_directory) / 'split_manifest.json'
+        dest_manifest_file.write_text(json.dumps(split_manifest, indent=2) + '\n')
+        logger.info(f'saved multi-dataset split manifest: {dest_manifest_file}')
 
     # save labeled data file(s)
     if isinstance(cfg.data.csv_file, str):
@@ -424,6 +425,8 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
         # To understand why we set this, see 'max_size_cycle' in UnlabeledDataModule.
         limit_train_batches=cfg.training.get("limit_train_batches") or steps_per_epoch,
         accumulate_grad_batches=cfg.training.get("accumulate_grad_batches", 1),
+        # clip the global gradient norm (None = off, the stock behavior)
+        gradient_clip_val=cfg.training.get("gradient_clip_val", None),
         profiler=cfg.training.get("profiler", None),
         sync_batchnorm=True,
     )
