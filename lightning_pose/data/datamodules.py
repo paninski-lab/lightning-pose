@@ -294,6 +294,8 @@ class BaseDataModule(pl.LightningDataModule):
         if visibility is not None:
             labeled_per_frame = (visibility[train_idxs] == 2).sum(dim=1).double()
         else:
+            if isinstance(self.dataset, MultiviewHeatmapDataset):
+                raise ValueError('sampling_temperature supports single-view datasets only')
             keypoints = self.dataset.keypoints
             labeled_per_frame = (~torch.isnan(keypoints[train_idxs, :, 0])).sum(dim=1).double()
 
@@ -331,7 +333,11 @@ class BaseDataModule(pl.LightningDataModule):
         """
         dataset_ids = getattr(self.dataset, 'dataset_ids', None)
         dataset_names = getattr(self.dataset, 'dataset_names', None)
-        if dataset_ids is None or dataset_names is None:
+        if (
+            dataset_ids is None
+            or dataset_names is None
+            or isinstance(self.dataset, MultiviewHeatmapDataset)
+        ):
             return None
         if self.train_dataset is None or self.val_dataset is None or self.test_dataset is None:
             raise RuntimeError('the train/val/test split must exist before its manifest')
