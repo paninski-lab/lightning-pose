@@ -72,6 +72,7 @@ ALLOWED_TRANSFORMER_BACKBONES = Literal[
     'vitb_dino',
     'vitb_dinov2',
     'vitb_dinov3',
+    'vitl_dinov3',
     'vitb_imagenet',
     'vitb_sam',
     'vitb_sam2',
@@ -86,6 +87,7 @@ ALLOWED_TRANSFORMER_BACKBONES_MULTIVIEW = Literal[
     'vitb_dino',
     'vitb_dinov2',
     'vitb_dinov3',
+    'vitl_dinov3',
     'vitb_imagenet',
 ]
 
@@ -116,6 +118,7 @@ BACKBONE_STRIDES: dict[str, int] = {
     'vitb_dino': 16,
     'vitb_dinov2': 16,
     'vitb_dinov3': 16,
+    'vitl_dinov3': 16,
     'vitb_imagenet': 16,
     'vitb_sam': 16,
     'vitb_sam2': 32,
@@ -209,6 +212,12 @@ def _build_transformer_backbone(
         from lightning_pose.models.backbones.vit_dino import VisionEncoderDino
         base = VisionEncoderDino(
             model_name='facebook/dinov3-vitb16-pretrain-lvd1689m', pretrained_patch_size=16,
+        )
+        encoder_embed_dim = base.vision_encoder.config.hidden_size
+    elif backbone_arch == 'vitl_dinov3':
+        from lightning_pose.models.backbones.vit_dino import VisionEncoderDino
+        base = VisionEncoderDino(
+            model_name='facebook/dinov3-vitl16-pretrain-lvd1689m', pretrained_patch_size=16,
         )
         encoder_embed_dim = base.vision_encoder.config.hidden_size
     elif 'vitb_imagenet' in backbone_arch:
