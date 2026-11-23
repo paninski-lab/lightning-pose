@@ -369,16 +369,38 @@ def _strip_animal_from_path(img_path: str, animal_names: list[str]) -> str:
     """Identify the frame a per-animal row came from.
 
     ``labeled-data/sess_Camera0_black/img0.png`` -> ``labeled-data/sess_Camera0/img0.png``
+    ``labeled-data/sess_an1_Camera1/img0.png``   -> ``labeled-data/sess_Camera1/img0.png``
 
     The animal lives in the directory rather than the filename, so anything that
-    parses a frame index out of the filename keeps working. Longer animal names
-    are matched first, so ``["black", "black_mouse"]`` cannot mis-split.
+    parses a frame index out of the filename keeps working. Datasets disagree on
+    *where* in the directory name it sits -- two-mouse puts it last, r24m puts it
+    before the view -- so it is matched as a run of whole underscore-separated
+    tokens at any position, and those tokens are removed. What matters is only
+    that both animals of a frame reduce to the same string, since that string is
+    the group id that keeps them in the same train/val split.
+
+    Token matching is also stricter than a substring test, which would let
+    ``an1`` match a directory named ``..._an10_...``. Longer animal names are
+    matched first, so ``["black", "black_mouse"]`` cannot mis-split.
     """
     p = PurePosixPath(img_path)
     parent = p.parent.name
+    tokens = parent.split("_")
     for animal in sorted(animal_names, key=len, reverse=True):
-        if parent.endswith(f"_{animal}"):
-            return str(p.parent.with_name(parent[: -len(animal) - 1]) / p.name)
+        want = animal.split("_")
+        hits = [
+            i for i in range(len(tokens) - len(want) + 1)
+            if tokens[i:i + len(want)] == want
+        ]
+        if len(hits) == 1:
+            i = hits[0]
+            rest = tokens[:i] + tokens[i + len(want):]
+            return str(p.parent.with_name("_".join(rest)) / p.name)
+        if len(hits) > 1:
+            raise ValueError(
+                f"Directory '{parent}' in '{img_path}' names animal '{animal}' "
+                f"{len(hits)} times; the frame it came from is ambiguous."
+            )
     raise ValueError(
         f"Directory '{parent}' in '{img_path}' carries none of animal_names="
         f"{animal_names}; every row of a per-animal dataset must name its animal."
