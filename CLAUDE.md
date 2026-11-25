@@ -492,3 +492,44 @@ not in `api/model.py` or the CLI — `_Precision`, `_Runtime`, `_ExportRuntime`,
 `api/model_runtime.py`, `cli/commands/predict.py`, `cli/commands/export.py`). The CLI derives its
 argparse `choices=` tuples via `typing.get_args()` on the imported alias rather than
 hand-duplicating a parallel tuple of strings.
+
+### Path and video-file handling (`lightning_pose/utils/io.py`, `io_video.py`)
+
+Shared path/file helpers live in two modules, split by concern. Use them instead of hand-rolling
+`iterdir()`/`glob()`/suffix checks or `os.path` logic at call sites.
+
+**`utils/io.py`** — general paths, label files, checkpoints:
+- `return_absolute_data_paths(data_cfg)` resolves `data.data_dir` / `data.video_dir`. It only
+  asserts that `data_dir` exists; `video_dir` is returned unvalidated (or `None` if unset),
+  because it is only needed for semi-supervised models.
+- `resolve_path(path, root_directory)` resolves a path that is relative to a project root or
+  absolute (root first, then cwd) and raises `FileNotFoundError` listing both locations. Use it for
+  label CSVs and bbox files. Calibration files are always root-relative, so they do not use it.
+- `parse_label_csv`, `get_keypoint_names`, `ckpt_path_from_base_path`, `get_context_img_paths`.
+
+**`utils/io_video.py`** — everything about finding and validating videos. The module docstring
+groups the functions; the rules that matter when adding code:
+- **One definition of "a video file"**: `VIDEO_SUFFIXES` (currently `.mp4` only, compared
+  case-insensitively) via `is_video_file` / `list_video_files`. Widening supported formats should
+  be a change to that constant, not to individual call sites. `list_video_files` is the one place
+  directories are scanned.
+- **Guards**: `has_videos` (bool) and `require_videos` (raises a descriptive
+  `FileNotFoundError`). Semi-supervised training calls `require_videos` in
+  `data/factory.py::get_data_module`; supervised training must never require a video directory.
+  Post-training video prediction in `train.py` skips quietly when `has_videos` is false.
+- **One view-matching rule**: `filename_matches_view` (view name as a token delimited by
+  non-alphanumeric characters, so `cam1` does not match `sess_cam10.mp4`). All multiview filename
+  parsing (`extract_view_name_from_video`, `extract_session_name_from_video`,
+  `match_videos_to_views`, `get_videos_in_dir`) goes through it; do not add substring or ad hoc
+  regex matching.
+- **Strict vs lenient grouping, and orientation**: `get_videos_in_dir(view_names=...)` is strict
+  (raises on missing or mismatched views) and returns **views x sessions**.
+  `group_videos_by_session` / `group_videos_in_dir_by_session` are lenient (sessions missing a
+  view are skipped) and return **sessions x views**.
+- `normalize_video_paths` turns a file, list, or directory into a validated list and raises
+  `ValueError` naming any file with an unsupported suffix.
+- `data/video/utils.py::require_video_files` is the reader-side check that every path is an
+  existing file; it is separate because it runs on already-resolved paths inside the readers.
+
+The package otherwise uses `pathlib.Path` rather than `os.path` (the exceptions are `os.chdir`,
+`os.environ`/`os.getenv`, and `shutil`, which have no pathlib equivalent).

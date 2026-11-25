@@ -2,7 +2,9 @@
 
 **Submodules**:
 
-- ``utils.io`` — path handling and file I/O utilities.
+- ``utils.io`` — path handling, label-file parsing, and checkpoint discovery.
+- ``utils.io_video`` — video file discovery and validation, and multiview video-filename
+  parsing (view/session grouping).
 - ``utils.device`` — GPU-presence checks: selecting a ``pl.Trainer`` accelerator, and
   guarding DALI-only semi-supervised training with a clear error.
 - ``utils.predictions`` — inference on labeled datasets and unlabeled videos; video annotation.
