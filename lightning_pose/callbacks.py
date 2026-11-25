@@ -2,7 +2,6 @@
 
 import json
 import logging
-import os
 import time
 from pathlib import Path
 from typing import Any
@@ -477,7 +476,7 @@ class JSONInferenceProgressTracker(Callback):
         self.total_steps = 0
 
         # Ensure the file exists (or is cleared) and the directory is available
-        os.makedirs(os.path.dirname(self.filepath) or ".", exist_ok=True)
+        Path(self.filepath).parent.mkdir(parents=True, exist_ok=True)
         self._save_progress(0, 1)
 
     def _save_progress(self, current: int, total: int) -> None:
@@ -490,16 +489,16 @@ class JSONInferenceProgressTracker(Callback):
 
         # Use a temporary file and rename to ensure atomic write,
         # preventing external readers from getting a half-written file.
-        temp_filepath = f"{self.filepath}.tmp"
+        filepath = Path(self.filepath)
+        temp_filepath = filepath.with_name(f'{filepath.name}.tmp')
         try:
             with open(temp_filepath, "w") as f:
                 json.dump(progress_data, f, indent=4)
-            os.replace(temp_filepath, self.filepath)
+            temp_filepath.replace(filepath)
         except Exception as e:
             # Handle potential file I/O errors gracefully
             logger.error(f'error saving progress to JSON: {e}')
-            if os.path.exists(temp_filepath):
-                os.remove(temp_filepath)
+            temp_filepath.unlink(missing_ok=True)
 
     def on_predict_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
         """Called when prediction starts."""
@@ -550,7 +549,7 @@ class JSONTrainingProgressTracker(Callback):
         self.current = 0
         self.total = 0
 
-        os.makedirs(os.path.dirname(self.filepath) or ".", exist_ok=True)
+        Path(self.filepath).parent.mkdir(parents=True, exist_ok=True)
         # Initialize with a base state (0 completed out of 1 total placeholder)
         self._save_progress(0, 1)
 
@@ -569,23 +568,24 @@ class JSONTrainingProgressTracker(Callback):
             },
         }
 
-        existing_file_contents = (
-            json.load(open(self.filepath)) if os.path.exists(self.filepath) else {}
-        )
+        filepath = Path(self.filepath)
+        existing_file_contents = {}
+        if filepath.exists():
+            with open(filepath) as f:
+                existing_file_contents = json.load(f)
         new_file_contents = {**existing_file_contents, **progress_data}
 
         # Use a temporary file and rename to ensure atomic write,
         # preventing external readers from getting a half-written file.
-        temp_filepath = f"{self.filepath}.tmp"
+        temp_filepath = filepath.with_name(f'{filepath.name}.tmp')
         try:
             with open(temp_filepath, "w") as f:
                 json.dump(new_file_contents, f, indent=4)
-            os.replace(temp_filepath, self.filepath)
+            temp_filepath.replace(filepath)
         except Exception as e:
             # Handle potential file I/O errors gracefully
             logger.error(f'error saving progress to JSON: {e}')
-            if os.path.exists(temp_filepath):
-                os.remove(temp_filepath)
+            temp_filepath.unlink(missing_ok=True)
 
     def on_train_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
         """Called when training starts."""

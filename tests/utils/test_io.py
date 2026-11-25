@@ -124,6 +124,14 @@ class TestReturnAbsoluteDataPaths:
         assert data_dir == str(tmp_path)
         assert video_dir == str(tmp_path / 'videos')
 
+    def test_return_absolute_data_paths_null_video_dir(self, tmp_path):
+        cfg = DictConfig({'data_dir': str(tmp_path), 'video_dir': None})
+        assert return_absolute_data_paths(cfg) == (str(tmp_path), None)
+
+    def test_return_absolute_data_paths_absolute_video_dir(self, tmp_path):
+        cfg = DictConfig({'data_dir': str(tmp_path), 'video_dir': str(tmp_path / 'elsewhere')})
+        assert return_absolute_data_paths(cfg)[1] == str(tmp_path / 'elsewhere')
+
     def test_return_absolute_data_paths_missing_data_dir_fails(self, tmp_path):
         cfg = DictConfig({'data_dir': str(tmp_path / 'missing'), 'video_dir': 'videos'})
         with pytest.raises(OSError):

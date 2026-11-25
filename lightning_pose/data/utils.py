@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-import os
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -90,7 +90,7 @@ def count_frames(video_file: str) -> int:
     """
     Simple function to count the number of frames in a video.
     """
-    assert os.path.isfile(video_file)
+    assert Path(video_file).is_file()
 
     import cv2
 

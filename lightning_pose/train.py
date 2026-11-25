@@ -55,7 +55,7 @@ def chdir(dir: str | Path) -> Generator[None, None, None]:
     Yields:
         None; the current working directory is restored on exit.
     """
-    pwd = os.getcwd()
+    pwd = Path.cwd()
     os.chdir(dir)
     try:
         yield
@@ -101,14 +101,14 @@ def train(
         trained Model instance.
     """
     # Default to cwd for backwards compatibility. Future: make model_dir required.
-    model_dir = Path(model_dir or os.getcwd())
+    model_dir = Path(model_dir or Path.cwd())
     model_dir.mkdir(parents=True, exist_ok=True)
     status_file_path = model_dir / "train_status.json"
     with chdir(model_dir):
         model = _train(cfg, status_file=status_file_path)
     # Comment out the above, and uncomment the below to skip
     # training and go straight to post-training analysis:
-    # model = Model.from_dir(os.getcwd())
+    # model = Model.from_dir(Path.cwd())
 
     if not skip_evaluation:
         _evaluate_on_training_dataset(model)
@@ -123,9 +123,10 @@ def train(
     except FileNotFoundError:
         status_file_contents = {}
     status_file_contents["status"] = "COMPLETED"
-    with open(str(status_file_path.with_suffix(".json.tmp")), "w") as f:
+    status_tmp_path = status_file_path.with_suffix(".json.tmp")
+    with open(status_tmp_path, "w") as f:
         json.dump(status_file_contents, f)
-    os.replace(str(status_file_path.with_suffix(".json.tmp")), status_file_path)
+    status_tmp_path.replace(status_file_path)
 
     return model
 
@@ -360,11 +361,11 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
     # Save configuration in output directory
     # ----------------------------------------------------------------------------------
     # Done before training; files will exist even if script dies prematurely.
-    hydra_output_directory = os.getcwd()
+    hydra_output_directory = Path.cwd()
     logger.info(f'hydra output directory: {hydra_output_directory}')
 
     # save config file
-    dest_config_file = Path(hydra_output_directory) / "config.yaml"
+    dest_config_file = hydra_output_directory / "config.yaml"
     OmegaConf.save(config=cfg, f=dest_config_file, resolve=False)
 
     # save labeled data file(s)
@@ -380,7 +381,7 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
         if not src_csv_file.is_absolute():
             src_csv_file = Path(data_dir) / src_csv_file
 
-        dest_csv_file = Path(hydra_output_directory) / src_csv_file.name
+        dest_csv_file = hydra_output_directory / src_csv_file.name
         shutil.copyfile(src_csv_file, dest_csv_file)
 
     # ----------------------------------------------------------------------------------

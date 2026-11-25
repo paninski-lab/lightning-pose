@@ -30,11 +30,10 @@ own ``__call__`` signature, so neither list needs manual upkeep.
 
 from __future__ import annotations
 
-import glob
 import inspect
 import logging
-import os
 from collections import OrderedDict
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal, get_type_hints
 
 import torch
@@ -304,7 +303,7 @@ def get_model(
         ckpt = cfg.model.checkpoint
         logger.info(f'loading weights from {ckpt}')
         if not ckpt.endswith('.ckpt'):
-            ckpt = glob.glob(os.path.join(ckpt, '**', '*.ckpt'), recursive=True)[0]
+            ckpt = str(sorted(Path(ckpt).rglob('*.ckpt'))[0])
         try:
             state_dict = torch.load(ckpt)['state_dict']
         except Exception as e:

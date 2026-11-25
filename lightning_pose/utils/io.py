@@ -4,7 +4,6 @@ from __future__ import annotations  # python 3.8 compatibility for sphinx
 
 import collections
 import logging
-import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -67,19 +66,12 @@ def ckpt_path_from_base_path(
         str: path to model checkpoint, or None if none found.
 
     """
-    import glob
-
-    model_search_path = os.path.join(
-        base_path,
-        logging_dir_name,
-        glob.escape(model_name),
-        "version_*",
-        "checkpoints",
-        "*.ckpt",
-    )
-
-    # Find all checkpoint files
-    all_checkpoint_files = glob.glob(model_search_path)
+    # Find all checkpoint files; model_name is part of the base (not the pattern), so any glob
+    # characters in it are matched literally
+    model_dir = Path(base_path) / logging_dir_name / model_name
+    all_checkpoint_files = [
+        str(f) for f in model_dir.glob('version_*/checkpoints/*.ckpt')
+    ]
     if not all_checkpoint_files:
         return None
 
@@ -104,7 +96,7 @@ def ckpt_path_from_base_path(
     # Find all "best" checkpoints in the latest version
     best_ckpt_files = []
     for f in latest_version_files:
-        if "-best.ckpt" in os.path.basename(f):
+        if "-best.ckpt" in Path(f).name:
             best_ckpt_files.append(f)
 
     if len(best_ckpt_files) == 1:
@@ -171,7 +163,7 @@ def get_keypoint_names(
     Returns:
         List of keypoint name strings.
     """
-    if csv_file is not None and os.path.exists(csv_file):
+    if csv_file is not None and Path(csv_file).exists():
         if header_rows is None:
             assert cfg is not None
             if "header_rows" in cfg.data:
@@ -243,7 +235,7 @@ def parse_label_csv(
     """
     if header_rows is None:
         header_rows = [0, 1, 2]
-    if not os.path.exists(csv_file):
+    if not Path(csv_file).exists():
         raise FileNotFoundError(f'could not find csv file at {csv_file}')
 
     csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
@@ -358,7 +350,7 @@ def resolve_path(path: str | Path, root_directory: str | Path) -> Path:
 
 def return_absolute_data_paths(
     data_cfg: DictConfig, n_dirs_back: int = 3
-) -> tuple[str, str]:
+) -> tuple[str, str | None]:
     """Generate absolute path for our example toy data.
 
     @hydra.main decorator switches the cwd when executing the decorated function, e.g.,
@@ -369,19 +361,22 @@ def return_absolute_data_paths(
         n_dirs_back (int):
 
     Returns:
-        Tuple[str, str]: absolute paths to data and video folders. The video path is resolved
-        but not validated, since it does not need to exist for purely supervised models; use
-        :func:`has_videos` or :func:`require_videos` to check it.
+        Tuple[str, str | None]: absolute paths to data and video folders. The video path is
+        ``None`` if ``data.video_dir`` is unset; otherwise it is resolved but not validated,
+        since it does not need to exist for purely supervised models; use :func:`has_videos` or
+        :func:`require_videos` to check it.
 
     """
     data_dir = return_absolute_path(data_cfg.data_dir, n_dirs_back=n_dirs_back)
-    if os.path.isabs(data_cfg.video_dir):
-        video_dir = data_cfg.video_dir
-    else:
-        video_dir = os.path.join(data_dir, data_cfg.video_dir)
+    # video_dir is optional (only semi-supervised models need it)
+    video_dir_cfg = data_cfg.get('video_dir')
+    video_dir = None
+    if video_dir_cfg is not None:
+        # an absolute video_dir overrides data_dir; a relative one is anchored to it
+        video_dir = str(Path(data_dir) / video_dir_cfg)
     # only the data directory is required here; videos are needed solely for semi-supervised
     # training and are validated on demand by `require_videos`
-    assert os.path.isdir(data_dir)
+    assert Path(data_dir).is_dir()
     return data_dir, video_dir
 
 
@@ -405,16 +400,16 @@ def get_videos_in_dir(
     video_dir: str, view_names: list[str] | None = None, return_mp4_only: bool = True
 ) -> list[str] | list[list[str]]:
     """Gather videos to process from a single directory."""
-    assert os.path.isdir(video_dir)
+    assert Path(video_dir).is_dir()
     # get all video files in directory, from allowed formats (compared case-insensitively)
     allowed_formats = VIDEO_SUFFIXES if return_mp4_only else ('.mp4', '.avi', '.mov')
     if view_names:
         # make a list of lists, where the outer list is over views, each inner list is over videos/
         # sessions
-        all_video_files = sorted(os.listdir(video_dir))
+        all_video_files = sorted(f.name for f in Path(video_dir).iterdir())
         video_files = [
             [
-                os.path.join(video_dir, f)
+                str(Path(video_dir) / f)
                 for f in all_video_files
                 if (
                     f.lower().endswith(allowed_formats)
@@ -449,9 +444,9 @@ def get_videos_in_dir(
                 )
     else:
         video_files = [
-            os.path.join(video_dir, f)
-            for f in os.listdir(video_dir)
-            if f.lower().endswith(allowed_formats)
+            str(Path(video_dir) / f.name)
+            for f in Path(video_dir).iterdir()
+            if f.name.lower().endswith(allowed_formats)
         ]
 
     if len(video_files) == 0:
@@ -562,10 +557,10 @@ def check_video_paths(
     if isinstance(video_paths, list):
         # presumably a list of files
         filenames = video_paths
-    elif isinstance(video_paths, str) and os.path.isfile(video_paths):
+    elif isinstance(video_paths, str) and Path(video_paths).is_file():
         # single video file
         filenames = [video_paths]
-    elif isinstance(video_paths, str) and os.path.isdir(video_paths):
+    elif isinstance(video_paths, str) and Path(video_paths).is_dir():
         # directory of videos
         filenames = get_videos_in_dir(video_paths, view_names=view_names)
     else:

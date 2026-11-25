@@ -6,7 +6,6 @@ and causes issues with some tools. This migration renames them to HH-MM-SS forma
 """
 
 import logging
-import os
 import re
 from pathlib import Path
 
@@ -40,7 +39,7 @@ def migrate() -> bool:
                     new_name = time_dir.name.replace(":", "-")
                     new_path = time_dir.parent / new_name
                     try:
-                        os.rename(time_dir, new_path)
+                        time_dir.rename(new_path)
                         logger.info(f'renamed: {time_dir} -> {new_path}')
                         migration_applied = True
                     except OSError as e:

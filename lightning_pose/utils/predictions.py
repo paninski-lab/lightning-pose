@@ -5,7 +5,6 @@ from __future__ import annotations
 import datetime
 import gc
 import logging
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast, overload
 
@@ -578,7 +577,7 @@ def predict_video(
 
         if is_multiview:
             for df, output_file in zip(preds_df, output_pred_file, strict=True):
-                os.makedirs(os.path.dirname(output_file), exist_ok=True)
+                Path(output_file).parent.mkdir(parents=True, exist_ok=True)
                 df.to_csv(output_file)
         else:
             assert isinstance(preds_df, pd.DataFrame)
@@ -806,7 +805,7 @@ def generate_labeled_video(
             coordinates of ``video_file``); when given, the bbox is drawn on each frame in
             bright green.
     """
-    os.makedirs(os.path.dirname(output_mp4_file), exist_ok=True)
+    Path(output_mp4_file).parent.mkdir(parents=True, exist_ok=True)
     # transform df to numpy array
     keypoints_arr = np.reshape(preds_df.to_numpy(), [preds_df.shape[0], -1, 3])
     xs_arr = keypoints_arr[:, :, 0]
