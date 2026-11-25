@@ -24,6 +24,7 @@ import torch
 from omegaconf import DictConfig, OmegaConf
 from PIL import Image
 
+from lightning_pose.utils.io import has_videos as _has_videos
 from lightning_pose.utils.io import parse_label_csv
 
 logger = logging.getLogger(__name__)
@@ -409,7 +410,7 @@ def analyze_dataset(dataset_path: Path) -> DatasetAnalysis:
         image_width, image_height = img.size
 
     video_dir = data_dir / 'videos'
-    has_videos = video_dir.is_dir() and any(video_dir.glob('*.mp4'))
+    has_videos = _has_videos(video_dir)
 
     return DatasetAnalysis(
         dataset_path=dataset_path,

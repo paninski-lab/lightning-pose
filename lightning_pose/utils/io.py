@@ -30,6 +30,8 @@ __all__ = [
     "find_video_files_for_views",
     "get_videos_in_dir",
     "check_video_paths",
+    "has_videos",
+    "require_videos",
     "get_context_img_paths",
     "split_video_files_by_view",
 ]
@@ -336,7 +338,9 @@ def return_absolute_data_paths(
         n_dirs_back (int):
 
     Returns:
-        Tuple[str, str]: absolute paths to data and video folders.
+        Tuple[str, str]: absolute paths to data and video folders. The video path is resolved
+        but not validated, since it does not need to exist for purely supervised models; use
+        :func:`has_videos` or :func:`require_videos` to check it.
 
     """
     data_dir = return_absolute_path(data_cfg.data_dir, n_dirs_back=n_dirs_back)
@@ -344,9 +348,9 @@ def return_absolute_data_paths(
         video_dir = data_cfg.video_dir
     else:
         video_dir = os.path.join(data_dir, data_cfg.video_dir)
-    # assert that those paths exist and in the proper format
+    # only the data directory is required here; videos are needed solely for semi-supervised
+    # training and are validated on demand by `require_videos`
     assert os.path.isdir(data_dir)
-    assert os.path.isdir(video_dir) or os.path.isfile(video_dir)
     return data_dir, video_dir
 
 
@@ -425,6 +429,44 @@ def get_videos_in_dir(
         raise OSError(f"Did not find any valid video files in {video_dir}")
 
     return video_files
+
+
+def has_videos(video_dir: str | Path | None) -> bool:
+    """Return whether ``video_dir`` is a video file or a directory containing videos.
+
+    Args:
+        video_dir: path to a video file or a directory of videos; may be ``None``.
+
+    Returns:
+        ``True`` if the path is an existing video file or a directory with at least one video
+        (mp4); ``False`` otherwise.
+    """
+    if video_dir is None:
+        return False
+    video_dir = Path(video_dir)
+    # mp4 only, matching `get_videos_in_dir` defaults used for semi-supervised training
+    if video_dir.is_file():
+        return video_dir.suffix.lower() == '.mp4'
+    if not video_dir.is_dir():
+        return False
+    return any(f.suffix.lower() == '.mp4' for f in video_dir.iterdir())
+
+
+def require_videos(video_dir: str | Path | None, purpose: str) -> None:
+    """Raise a descriptive error unless ``video_dir`` contains videos.
+
+    Args:
+        video_dir: path to a video file or a directory of videos; may be ``None``.
+        purpose: what the videos are needed for, used in the error message.
+
+    Raises:
+        FileNotFoundError: if ``video_dir`` is unset, missing, or contains no videos.
+    """
+    if not has_videos(video_dir):
+        raise FileNotFoundError(
+            f'{purpose} requires a non-empty video directory (data.video_dir); '
+            f'found {video_dir}. Add videos to this directory or use only supervised losses.'
+        )
 
 
 @overload

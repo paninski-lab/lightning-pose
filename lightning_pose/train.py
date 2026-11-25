@@ -33,7 +33,9 @@ from lightning_pose.models import get_model
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
 from lightning_pose.utils.device import get_accelerator
 from lightning_pose.utils.io import (
+    has_videos,
     return_absolute_data_paths,
+    return_absolute_path,
 )
 
 logger = logging.getLogger(__name__)
@@ -253,6 +255,17 @@ def _predict_test_videos(model: Model) -> None:
         model: trained model used for prediction.
     """
     if model.config.cfg.eval.predict_vids_after_training:
+        # the video directory is optional for supervised models; skip if it is absent/empty
+        try:
+            test_video_dir = return_absolute_path(model.config.cfg.eval.test_videos_directory)
+        except (OSError, TypeError):  # missing path, or null in the config
+            test_video_dir = None
+        if not has_videos(test_video_dir):
+            logger.info(
+                f'no videos found in cfg.eval.test_videos_directory '
+                f'({model.config.cfg.eval.test_videos_directory}); skipping video prediction'
+            )
+            return
         pretty_print_str("Predicting videos in cfg.eval.test_videos_directory...")
         # dealing with multiview
         if model.config.is_multi_view():

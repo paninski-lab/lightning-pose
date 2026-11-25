@@ -39,6 +39,8 @@ Lightning Pose assumes the following project directory structure, as in the exam
 
 * ``<VIDEO_DIR>/``: when training semi-supervised models, the videos in this directory will be used
   for computing the unsupervised losses.
+  This directory is only required for semi-supervised models, where it must contain at least one
+  video; it can be omitted for purely supervised models.
   This directory can take any name, and needs to be specified in the config file under
   ``data.video_dir``.
   Notes that videos *must* be mp4 files that use the h.264 codec; see more information in the

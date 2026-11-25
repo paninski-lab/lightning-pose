@@ -38,7 +38,8 @@ provided.
   if they are too large, the model takes longer to train and might not train as well.
   See the :ref:`FAQs <faq_image_resize_dims>` for guidance on choosing this value.
 
-* ``data.data_dir/video_dir`` (*str*): update these to reflect your (absolute) local paths
+* ``data.data_dir/video_dir`` (*str*): update these to reflect your (absolute) local paths;
+  ``video_dir`` is only required (and must contain videos) for semi-supervised models
 
 * ``data.csv_file`` (*str*): location of labels csv file; this should be relative to
   ``data.data_dir``
@@ -272,7 +273,8 @@ Evaluation
 The following parameters are used for general evaluation.
 
 * ``eval.predict_vids_after_training`` (*bool, default: true*): if true, after training run
-  inference on all videos located in ``eval.test_videos_directory`` (see below)
+  inference on all videos located in ``eval.test_videos_directory`` (see below); this step is
+  skipped if that directory is missing or contains no videos
 
 * ``eval.test_videos_directory`` (*str, default: null*): absolute path to a video directory
   containing videos for post-training prediction.

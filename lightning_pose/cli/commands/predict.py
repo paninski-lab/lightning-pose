@@ -384,8 +384,9 @@ def _predict_cropzoom(args: argparse.Namespace) -> None:
             video_files.append(p)
         else:
             raise NotImplementedError(
-                f"--detector only supports video inputs (.mp4 files or directories of them), "
-                f"got {p}."
+                f'--detector only supports .mp4 video files or directories containing .mp4 '
+                f'videos, got {p} (suffix {p.suffix!r}). Convert other video formats '
+                f'(e.g. .avi, .mov) to .mp4 first, or run `litpose predict` without --detector.'
             )
 
     output_dir = pipeline.pose_estimator.video_preds_dir()
@@ -468,7 +469,12 @@ def _predict_multi_type(
     elif path.suffix in [".png", ".jpg"]:
         raise NotImplementedError("Not yet implemented: predicting on image files.")
     else:
-        pass
+        logger.warning(
+            f'skipping {path}: unsupported input type {path.suffix!r}. '
+            f'Supported inputs are .mp4 video files, directories of .mp4 videos, and .csv '
+            f'label files. Other video formats (e.g. .avi, .mov) must be converted to .mp4 '
+            f'(h.264 codec) first; see the FAQs on video formats.'
+        )
 
 
 def _predict_multi_type_multi_view(
@@ -556,7 +562,14 @@ def _predict_multi_type_multi_view(
             else:
                 logger.info(f'skipping {path}: no videos found')
     else:
+        unsupported = [str(p) for p in paths if p.suffix != '.mp4' and not p.is_dir()]
         raise NotImplementedError(
-            "For multi view model predictions, either pass in multiple video views to be "
-            "predicted, or a directory containing videos"
+            'for multiview models, input paths must be either (a) .mp4 video files, one per '
+            'view, or (b) directories containing .mp4 videos, and the two cannot be mixed. '
+            + (
+                f'unsupported inputs (only .mp4 videos are supported; convert other formats '
+                f'such as .avi first): {unsupported}'
+                if unsupported
+                else f'got a mix of files and directories: {[str(p) for p in paths]}'
+            )
         )

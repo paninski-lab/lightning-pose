@@ -9,6 +9,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 import torch
+from omegaconf import DictConfig
 
 from lightning_pose.utils import io as io_utils
 from lightning_pose.utils.io import (
@@ -19,9 +20,73 @@ from lightning_pose.utils.io import (
     find_video_files_for_views,
     get_context_img_paths,
     get_videos_in_dir,
+    has_videos,
+    require_videos,
+    return_absolute_data_paths,
     return_absolute_path,
     split_video_files_by_view,
 )
+
+
+class TestHasVideos:
+    """Test the function has_videos."""
+
+    def test_has_videos_directory_with_mp4(self, tmp_path):
+        (tmp_path / 'vid.mp4').touch()
+        assert has_videos(tmp_path)
+        assert has_videos(str(tmp_path))
+
+    def test_has_videos_single_file(self, tmp_path):
+        (tmp_path / 'vid.mp4').touch()
+        assert has_videos(tmp_path / 'vid.mp4')
+
+    def test_has_videos_empty_directory(self, tmp_path):
+        assert not has_videos(tmp_path)
+
+    def test_has_videos_no_mp4_files(self, tmp_path):
+        (tmp_path / 'notes.txt').touch()
+        assert not has_videos(tmp_path)
+
+    def test_has_videos_missing_path(self, tmp_path):
+        assert not has_videos(tmp_path / 'missing')
+
+    def test_has_videos_none(self):
+        assert not has_videos(None)
+
+
+class TestRequireVideos:
+    """Test the function require_videos."""
+
+    def test_require_videos_passes_with_videos(self, tmp_path):
+        (tmp_path / 'vid.mp4').touch()
+        require_videos(tmp_path, purpose='semi-supervised training')
+
+    def test_require_videos_raises_for_missing_directory(self, tmp_path):
+        with pytest.raises(FileNotFoundError, match='semi-supervised training requires'):
+            require_videos(tmp_path / 'missing', purpose='semi-supervised training')
+
+    def test_require_videos_raises_for_empty_directory(self, tmp_path):
+        with pytest.raises(FileNotFoundError, match='non-empty video directory'):
+            require_videos(tmp_path, purpose='semi-supervised training')
+
+    def test_require_videos_raises_for_none(self):
+        with pytest.raises(FileNotFoundError):
+            require_videos(None, purpose='semi-supervised training')
+
+
+class TestReturnAbsoluteDataPaths:
+    """Test the function return_absolute_data_paths."""
+
+    def test_return_absolute_data_paths_missing_video_dir_ok(self, tmp_path):
+        cfg = DictConfig({'data_dir': str(tmp_path), 'video_dir': 'videos'})
+        data_dir, video_dir = return_absolute_data_paths(cfg)
+        assert data_dir == str(tmp_path)
+        assert video_dir == str(tmp_path / 'videos')
+
+    def test_return_absolute_data_paths_missing_data_dir_fails(self, tmp_path):
+        cfg = DictConfig({'data_dir': str(tmp_path / 'missing'), 'video_dir': 'videos'})
+        with pytest.raises(OSError):
+            return_absolute_data_paths(cfg)
 
 
 class TestReturnAbsolutePath:

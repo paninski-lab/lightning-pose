@@ -353,7 +353,7 @@ class TestHandleCropzoom:
         pipeline.predict_on_video_file.assert_called_once()
 
     def test_csv_input_raises(self, tmp_path, mock_pipeline_cls):
-        with pytest.raises(NotImplementedError, match='only supports video'):
+        with pytest.raises(NotImplementedError, match='only supports .mp4'):
             handle(self._make_args(tmp_path, input_path=tmp_path / 'labels.csv'))
 
     @pytest.mark.parametrize(
@@ -457,6 +457,17 @@ class TestPredictMultiType:
         mock_model.predict_on_video_file.assert_called_once()
 
 
+    def test_unsupported_suffix_logs_warning(self, tmp_path, mock_model, caplog):
+        """An unsupported input (e.g. .avi) is skipped with an informative warning."""
+        with caplog.at_level('WARNING'):
+            _predict_multi_type(
+                mock_model, tmp_path / 'vid.avi', skip_viz=True, skip_existing=False,
+            )
+        assert 'unsupported input type' in caplog.text
+        assert '.avi' in caplog.text
+        mock_model.predict_on_video_file.assert_not_called()
+
+
 class TestPredictMultiTypeMultiView:
     """Test _predict_multi_type_multi_view bbox threading."""
 
@@ -505,6 +516,15 @@ class TestPredictMultiTypeMultiView:
             _predict_multi_type_multi_view(
                 mock_model, self._make_videos(tmp_path), skip_viz=True, skip_existing=False,
                 bbox_dir=bbox_dir,
+            )
+        mock_model.predict_on_video_file_multiview.assert_not_called()
+
+    def test_unsupported_suffix_raises_informative_error(self, tmp_path, mock_model):
+        """Non-mp4 videos raise an error that names the offending inputs."""
+        videos = [tmp_path / 'sess_view0.avi', tmp_path / 'sess_view1.avi']
+        with pytest.raises(NotImplementedError, match=r'only .mp4 videos.*sess_view0\.avi'):
+            _predict_multi_type_multi_view(
+                mock_model, videos, skip_viz=True, skip_existing=False,
             )
         mock_model.predict_on_video_file_multiview.assert_not_called()
 
