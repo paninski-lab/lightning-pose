@@ -94,6 +94,7 @@ def handle(args: argparse.Namespace) -> None:
     """Handle the create_bbox command."""
     import lightning_pose.utils.cropzoom as cz  # noqa: F811
     from lightning_pose.api import Model  # noqa: F811
+    from lightning_pose.utils.io import is_video_file, list_video_files
 
     model = Model.from_dir(args.model_dir)
 
@@ -107,12 +108,12 @@ def handle(args: argparse.Namespace) -> None:
         p = Path(p)
         if p.is_dir():
             logger.info(f'processing directory {p}')
-            input_paths.extend(sorted(f for f in p.iterdir() if f.suffix == '.mp4'))
+            input_paths.extend(list_video_files(p))
         else:
             input_paths.append(p)
 
     for input_path in input_paths:
-        if input_path.suffix == '.mp4':
+        if is_video_file(input_path):
             input_preds_file = model.video_preds_dir() / (input_path.stem + '.csv')
             output_bbox_file = model.video_preds_dir() / (input_path.stem + '_bbox.csv')
         elif input_path.suffix == '.csv':

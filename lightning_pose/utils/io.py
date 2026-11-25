@@ -18,6 +18,9 @@ from omegaconf import DictConfig, ListConfig
 
 logger = logging.getLogger(__name__)
 
+# video formats accepted for training and inference; compared case-insensitively
+VIDEO_SUFFIXES: tuple[str, ...] = ('.mp4',)
+
 # to ignore imports for sphinx-autoapidoc
 __all__ = [
     "ckpt_path_from_base_path",
@@ -30,6 +33,9 @@ __all__ = [
     "find_video_files_for_views",
     "get_videos_in_dir",
     "check_video_paths",
+    "VIDEO_SUFFIXES",
+    "is_video_file",
+    "list_video_files",
     "has_videos",
     "require_videos",
     "get_context_img_paths",
@@ -431,6 +437,38 @@ def get_videos_in_dir(
     return video_files
 
 
+def is_video_file(path: str | Path) -> bool:
+    """Return whether ``path`` has a supported video suffix (case-insensitive).
+
+    This only inspects the name; it does not check that the file exists.
+
+    Args:
+        path: path to test.
+
+    Returns:
+        ``True`` if the suffix is in :data:`VIDEO_SUFFIXES`.
+    """
+    return Path(path).suffix.lower() in VIDEO_SUFFIXES
+
+
+def list_video_files(path: str | Path) -> list[Path]:
+    """List the video files at ``path``, which may be a single file or a directory.
+
+    Args:
+        path: a video file or a directory of videos (not searched recursively).
+
+    Returns:
+        sorted list of video files; ``[path]`` for a video file, and an empty list if the path
+        is missing, is not a video file, or is a directory without videos.
+    """
+    path = Path(path)
+    if path.is_file():
+        return [path] if is_video_file(path) else []
+    if path.is_dir():
+        return sorted(f for f in path.iterdir() if f.is_file() and is_video_file(f))
+    return []
+
+
 def has_videos(video_dir: str | Path | None) -> bool:
     """Return whether ``video_dir`` is a video file or a directory containing videos.
 
@@ -438,18 +476,10 @@ def has_videos(video_dir: str | Path | None) -> bool:
         video_dir: path to a video file or a directory of videos; may be ``None``.
 
     Returns:
-        ``True`` if the path is an existing video file or a directory with at least one video
-        (mp4); ``False`` otherwise.
+        ``True`` if the path is an existing video file or a directory with at least one video;
+        ``False`` otherwise.
     """
-    if video_dir is None:
-        return False
-    video_dir = Path(video_dir)
-    # mp4 only, matching `get_videos_in_dir` defaults used for semi-supervised training
-    if video_dir.is_file():
-        return video_dir.suffix.lower() == '.mp4'
-    if not video_dir.is_dir():
-        return False
-    return any(f.suffix.lower() == '.mp4' for f in video_dir.iterdir())
+    return video_dir is not None and len(list_video_files(video_dir)) > 0
 
 
 def require_videos(video_dir: str | Path | None, purpose: str) -> None:
@@ -727,7 +757,7 @@ def find_video_files_for_views(
         raise FileNotFoundError(f"Video directory not found: {video_dir}")
 
     # Get all video files in the directory
-    all_video_files = list(video_dir_path.glob("*.mp4"))
+    all_video_files = list_video_files(video_dir_path)
 
     if not all_video_files:
         raise FileNotFoundError(f"No video files found in {video_dir}")

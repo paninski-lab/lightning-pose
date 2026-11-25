@@ -359,8 +359,9 @@ def _predict_cropzoom(args: argparse.Namespace) -> None:
         NotImplementedError: if an input is not a video or directory of videos.
         ValueError: if the bbox sizing options are invalid.
     """
-    # delay this import because it's slow
+    # delay these imports because they're slow
     from lightning_pose.pipelines import CropZoomPipeline
+    from lightning_pose.utils.io import is_video_file, list_video_files
 
     sizing, anchor_keypoints = resolve_bbox_sizing(
         args.crop_ratio, args.crop_size, args.anchor_keypoints,
@@ -379,8 +380,8 @@ def _predict_cropzoom(args: argparse.Namespace) -> None:
     for p in (Path(p) for p in args.input_path):
         if p.is_dir():
             logger.info(f'processing directory {p}')
-            video_files.extend(sorted(f for f in p.iterdir() if f.suffix == ".mp4"))
-        elif p.suffix == ".mp4":
+            video_files.extend(list_video_files(p))
+        elif is_video_file(p):
             video_files.append(p)
         else:
             raise NotImplementedError(
@@ -425,9 +426,12 @@ def _predict_multi_type(
         bbox_dir: optional directory containing bbox CSV files. For CSV inputs, ``bbox.csv``
             inside this directory is used. For video inputs, ``<stem>_bbox.csv`` is used.
     """
+    # delay this import because it's slow
+    from lightning_pose.utils.io import is_video_file, list_video_files
+
     if path.is_dir():
         image_files = [p for p in path.iterdir() if p.is_file() and p.suffix in [".png", ".jpg"]]
-        video_files = [p for p in path.iterdir() if p.is_file() and p.suffix == ".mp4"]
+        video_files = list_video_files(path)
 
         if len(image_files) > 0:
             raise NotImplementedError("Predicting on image dir.")
@@ -441,7 +445,7 @@ def _predict_multi_type(
                 reader=reader,
             )
 
-    elif path.suffix == ".mp4":
+    elif is_video_file(path):
         # Check if prediction file already exists
         prediction_csv_file = model.video_preds_dir() / f"{path.stem}.csv"
         if skip_existing and prediction_csv_file.exists():
@@ -501,11 +505,13 @@ def _predict_multi_type_multi_view(
     # delay this import because it's slow
     from lightning_pose.utils.io import (
         extract_session_name_from_video,
+        is_video_file,
+        list_video_files,
         split_video_files_by_view,
     )
 
     # if we pass in all videos, collect them into session batches and process
-    if all(path.suffix == ".mp4" for path in paths):
+    if all(is_video_file(path) for path in paths):
         video_files_split = split_video_files_by_view(
             paths, model.config.cfg.data.view_names
         )
@@ -549,9 +555,7 @@ def _predict_multi_type_multi_view(
     # if we have a list of directories, we process the videos in each separately
     elif all(path.is_dir() for path in paths):
         for path in paths:
-            video_files = [
-                p for p in path.iterdir() if p.is_file() and p.suffix == ".mp4"
-            ]
+            video_files = list_video_files(path)
             if len(video_files) > 0:
                 logger.info(f'processing directory {path}')
 
@@ -562,7 +566,7 @@ def _predict_multi_type_multi_view(
             else:
                 logger.info(f'skipping {path}: no videos found')
     else:
-        unsupported = [str(p) for p in paths if p.suffix != '.mp4' and not p.is_dir()]
+        unsupported = [str(p) for p in paths if not is_video_file(p) and not p.is_dir()]
         raise NotImplementedError(
             'for multiview models, input paths must be either (a) .mp4 video files, one per '
             'view, or (b) directories containing .mp4 videos, and the two cannot be mixed. '

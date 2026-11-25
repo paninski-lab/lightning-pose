@@ -21,11 +21,51 @@ from lightning_pose.utils.io import (
     get_context_img_paths,
     get_videos_in_dir,
     has_videos,
+    is_video_file,
+    list_video_files,
     require_videos,
     return_absolute_data_paths,
     return_absolute_path,
     split_video_files_by_view,
 )
+
+
+class TestIsVideoFile:
+    """Test the function is_video_file."""
+
+    @pytest.mark.parametrize('name', ['a.mp4', 'a.MP4', 'dir/a.Mp4'])
+    def test_is_video_file_true(self, name):
+        assert is_video_file(name)
+
+    @pytest.mark.parametrize('name', ['a.avi', 'a.csv', 'a', 'mp4'])
+    def test_is_video_file_false(self, name):
+        assert not is_video_file(name)
+
+
+class TestListVideoFiles:
+    """Test the function list_video_files."""
+
+    def test_list_video_files_directory_sorted_and_filtered(self, tmp_path):
+        for name in ['b.mp4', 'a.MP4', 'c.avi', 'notes.txt']:
+            (tmp_path / name).touch()
+        (tmp_path / 'sub.mp4').mkdir()  # a directory with a video-like name is ignored
+        assert list_video_files(tmp_path) == [tmp_path / 'a.MP4', tmp_path / 'b.mp4']
+
+    def test_list_video_files_single_file(self, tmp_path):
+        (tmp_path / 'a.mp4').touch()
+        assert list_video_files(str(tmp_path / 'a.mp4')) == [tmp_path / 'a.mp4']
+
+    def test_list_video_files_non_video_file(self, tmp_path):
+        (tmp_path / 'a.csv').touch()
+        assert list_video_files(tmp_path / 'a.csv') == []
+
+    def test_list_video_files_missing_path(self, tmp_path):
+        assert list_video_files(tmp_path / 'missing') == []
+
+    def test_list_video_files_not_recursive(self, tmp_path):
+        (tmp_path / 'sub').mkdir()
+        (tmp_path / 'sub' / 'a.mp4').touch()
+        assert list_video_files(tmp_path) == []
 
 
 class TestHasVideos:
