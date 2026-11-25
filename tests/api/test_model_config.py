@@ -150,17 +150,25 @@ class TestTestVideoFilesMultiview:
         with pytest.raises(AssertionError):
             _mc(_singleview_cfg_dict()).test_video_files_multiview()
 
-    def test_test_video_files_multiview_returns_grouped_paths(self):
-        """Returns the list of per-session path groups from group_videos_in_dir_by_session."""
+    def test_test_video_files_multiview_returns_grouped_paths(self, tmp_path):
+        """Returns per-session path groups ordered by view."""
         cfg = _multiview_cfg_dict()
-        cfg['eval'] = {'test_videos_directory': '/fake/videos'}
-        fake_result = [[Path('/fake/videos/cam0.mp4'), Path('/fake/videos/cam1.mp4')]]
-        with patch(
-            'lightning_pose.api.model_config.group_videos_in_dir_by_session',
-            return_value=fake_result,
-        ):
-            result = _mc(cfg).test_video_files_multiview()
-        assert result == fake_result
+        cfg['eval'] = {'test_videos_directory': str(tmp_path)}
+        view_names = list(cfg['data']['view_names'])
+        for session in ['s0', 's1']:
+            for view in view_names:
+                (tmp_path / f'{session}_{view}.mp4').touch()
+        result = _mc(cfg).test_video_files_multiview()
+        assert result == [
+            [tmp_path / f'{session}_{view}.mp4' for view in view_names]
+            for session in ['s0', 's1']
+        ]
+
+    def test_test_video_files_multiview_missing_directory_raises(self, tmp_path):
+        cfg = _multiview_cfg_dict()
+        cfg['eval'] = {'test_videos_directory': str(tmp_path / 'missing')}
+        with pytest.raises(FileNotFoundError, match='multiview test-video prediction'):
+            _mc(cfg).test_video_files_multiview()
 
 
 # ---------------------------------------------------------------------------

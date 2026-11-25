@@ -13,7 +13,6 @@ from lightning_pose.utils.io_video import (
     filename_matches_view,
     get_videos_in_dir,
     group_videos_by_session,
-    group_videos_in_dir_by_session,
     has_videos,
     is_video_file,
     list_video_files,
@@ -230,7 +229,7 @@ def test_get_videos_in_dir(toy_data_dir, tmpdir):
     shutil.copyfile(
         video_list[0], os.path.join(test_4_dir, f"vid3_{view_names[0]}.mp4")
     )
-    with pytest.raises(RuntimeError):
+    with pytest.raises(ValueError, match='vid3.*missing'):
         get_videos_in_dir(test_4_dir, view_names=view_names)
 
 
@@ -383,44 +382,79 @@ def test_extract_session_name_from_video_warns_on_non_underscore_separator(caplo
     )
 
 
-def test_group_videos_in_dir_by_session(toy_data_dir, tmpdir):
-    # Create test directory with video files
-    test_dir = os.path.join(str(tmpdir), "test_videos")
-    os.makedirs(test_dir)
+class TestGetVideosInDirMultiview:
+    """Test the strict multiview layout of get_videos_in_dir."""
 
-    # Get the toy video file using the same method as other tests
-    videos_dir = os.path.join(toy_data_dir, "videos")
-    toy_video_list = get_videos_in_dir(videos_dir)
-    toy_video = toy_video_list[0]
+    def test_get_videos_in_dir_views_by_sessions_layout(self, tmp_path):
+        for name in ['s1_top', 's1_bot', 's2_top', 's2_bot']:
+            (tmp_path / f'{name}.mp4').touch()
+        result = get_videos_in_dir(str(tmp_path), view_names=['top', 'bot'])
+        assert result == [
+            [str(tmp_path / 's1_top.mp4'), str(tmp_path / 's2_top.mp4')],
+            [str(tmp_path / 's1_bot.mp4'), str(tmp_path / 's2_bot.mp4')],
+        ]
 
-    # Create test video files
-    video1_path = os.path.join(test_dir, "session1_top.mp4")
-    video2_path = os.path.join(test_dir, "session1_bot.mp4")
+    def test_get_videos_in_dir_view_without_videos_raises(self, tmp_path):
+        (tmp_path / 's1_top.mp4').touch()
+        with pytest.raises(ValueError, match=r"'s1' is missing \['bot'\]"):
+            get_videos_in_dir(str(tmp_path), view_names=['top', 'bot'])
 
-    # Copy toy video to create test files
-    shutil.copyfile(toy_video, video1_path)
-    shutil.copyfile(toy_video, video2_path)
+    def test_get_videos_in_dir_empty_raises(self, tmp_path):
+        with pytest.raises(OSError, match='Did not find any valid video files'):
+            get_videos_in_dir(str(tmp_path), view_names=['top', 'bot'])
 
-    view_names = ["top", "bot"]
+    def test_get_videos_in_dir_accepts_avi_when_not_mp4_only(self, tmp_path):
+        (tmp_path / 'a.avi').touch()
+        assert get_videos_in_dir(str(tmp_path), return_mp4_only=False) == [
+            str(tmp_path / 'a.avi')
+        ]
+        with pytest.raises(OSError):
+            get_videos_in_dir(str(tmp_path))
 
-    # Test 1: find videos for specified views
-    video_files_per_session = group_videos_in_dir_by_session(test_dir, view_names)
-    assert len(video_files_per_session) == 1
 
-    video_files = video_files_per_session[0]
-    assert len(video_files) == 2
-    assert "top" in str(video_files[0])
-    assert "bot" in str(video_files[1])
+class TestGroupVideosBySessionStrictness:
+    """Test the strict flag and warnings of group_videos_by_session."""
 
-    # Test 2: directory doesn't exist
-    with pytest.raises(FileNotFoundError):
-        group_videos_in_dir_by_session("/nonexistent/dir", view_names)
+    views = ['top', 'bot']
 
-    # Test 3: no video files in directory
-    empty_dir = os.path.join(str(tmpdir), "empty_dir")
-    os.makedirs(empty_dir)
-    with pytest.raises(FileNotFoundError):
-        group_videos_in_dir_by_session(empty_dir, view_names)
+    def _paths(self, *names):
+        return [Path(f'/d/{n}.mp4') for n in names]
+
+    def test_lenient_warns_about_incomplete_session(self, caplog):
+        paths = self._paths('s1_top', 's1_bot', 's2_top')
+        with caplog.at_level(logging.WARNING):
+            sessions = group_videos_by_session(paths, self.views)
+        assert sessions == [[Path('/d/s1_top.mp4'), Path('/d/s1_bot.mp4')]]
+        assert "'s2' is missing ['bot']" in caplog.text
+
+    def test_lenient_warns_about_unmatched_files(self, caplog):
+        paths = self._paths('s1_top', 's1_bot', 's1_vew1')
+        with caplog.at_level(logging.WARNING):
+            sessions = group_videos_by_session(paths, self.views)
+        assert len(sessions) == 1
+        assert 's1_vew1.mp4' in caplog.text
+        assert 'match none of the views' in caplog.text
+
+    def test_lenient_no_warning_when_all_complete(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            group_videos_by_session(self._paths('s1_top', 's1_bot'), self.views)
+        assert caplog.text == ''
+
+    def test_strict_raises_on_incomplete_session(self):
+        paths = self._paths('s1_top', 's1_bot', 's2_top')
+        with pytest.raises(ValueError, match=r"'s2' is missing \['bot'\]"):
+            group_videos_by_session(paths, self.views, strict=True)
+
+    def test_strict_raises_when_nothing_matches(self):
+        with pytest.raises(ValueError, match='no videos match'):
+            group_videos_by_session(self._paths('s1_side'), self.views, strict=True)
+
+    def test_strict_still_warns_about_unmatched_files(self, caplog):
+        paths = self._paths('s1_top', 's1_bot', 's1_side')
+        with caplog.at_level(logging.WARNING):
+            sessions = group_videos_by_session(paths, self.views, strict=True)
+        assert len(sessions) == 1
+        assert 's1_side.mp4' in caplog.text
 
 
 def test_group_videos_by_session():

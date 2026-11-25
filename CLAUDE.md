@@ -520,12 +520,14 @@ groups the functions; the rules that matter when adding code:
 - **One view-matching rule**: `filename_matches_view` (view name as a token delimited by
   non-alphanumeric characters, so `cam1` does not match `sess_cam10.mp4`). All multiview filename
   parsing (`extract_view_name_from_video`, `extract_session_name_from_video`,
-  `match_videos_to_views`, `get_videos_in_dir`) goes through it; do not add substring or ad hoc
+  `match_videos_to_views`, `group_videos_by_session`) goes through it; do not add substring or ad hoc
   regex matching.
-- **Strict vs lenient grouping, and orientation**: `get_videos_in_dir(view_names=...)` is strict
-  (raises on missing or mismatched views) and returns **views x sessions**.
-  `group_videos_by_session` / `group_videos_in_dir_by_session` are lenient (sessions missing a
-  view are skipped) and return **sessions x views**.
+- **One grouping function, with a `strict` flag**: `group_videos_by_session(paths, view_names,
+  strict=False)` returns **sessions x views**. Lenient (default) skips sessions that are missing a
+  view and videos that match no view, and logs a warning naming each; strict raises `ValueError`.
+  Used lenient by `litpose predict` and post-training test-video prediction (one bad session must
+  not stop the rest); used strict by `get_videos_in_dir(view_names=...)` for semi-supervised
+  training, which also transposes to **views x sessions**, the only layout the DALI readers want.
 - `normalize_video_paths` turns a file, list, or directory into a validated list and raises
   `ValueError` naming any file with an unsupported suffix.
 - `data/video/utils.py::require_video_files` is the reader-side check that every path is an

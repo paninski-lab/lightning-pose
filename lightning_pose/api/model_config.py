@@ -12,8 +12,10 @@ from lightning_pose.data.datasets import has_calibration_files
 from lightning_pose.models import ALLOWED_MODEL_TYPES
 from lightning_pose.utils.io import return_absolute_path
 from lightning_pose.utils.io_video import (
-    group_videos_in_dir_by_session,
+    group_videos_by_session,
+    list_video_files,
     normalize_video_paths,
+    require_videos,
 )
 
 # to ignore imports for sphinx-autoapidoc
@@ -118,11 +120,14 @@ class ModelConfig:
 
         Raises:
             AssertionError: if called on a single-view model.
+            FileNotFoundError: if ``cfg.eval.test_videos_directory`` is missing or has no videos.
         """
         assert self.is_multi_view()
-        return group_videos_in_dir_by_session(
-            video_dir=self.cfg.eval.test_videos_directory,
-            view_names=self.cfg.data.view_names,
+        video_dir = Path(self.cfg.eval.test_videos_directory)
+        require_videos(video_dir, purpose='multiview test-video prediction')
+        return group_videos_by_session(
+            list_video_files(video_dir),
+            list(self.cfg.data.view_names),
         )
 
     def validate(self) -> None:
