@@ -368,13 +368,20 @@ def normalize_video_paths(
 
 @overload
 def normalize_video_paths(
-    video_paths: list[str] | str,
+    video_paths: list[list[str]],
+    view_names: None = None,
+) -> list[list[str]]: ...
+
+
+@overload
+def normalize_video_paths(
+    video_paths: list[str] | list[list[str]] | str,
     view_names: list[str],
 ) -> list[list[str]]: ...
 
 
 def normalize_video_paths(
-    video_paths: list[str] | str,
+    video_paths: list[str] | list[list[str]] | str,
     view_names: list[str] | None = None,
 ) -> list[str] | list[list[str]]:
     """Validate and normalise video paths, returning a flat or nested list of mp4 paths.
@@ -384,7 +391,8 @@ def normalize_video_paths(
     models.
 
     Args:
-        video_paths: single video file path, list of video file paths, or a directory.
+        video_paths: single video file path, list of video file paths (flat, or nested per view
+            for multiview), or a directory.
         view_names: if provided, organise the paths by view name for a multi-view model.
 
     Returns:
@@ -396,6 +404,7 @@ def normalize_video_paths(
             resulting files does not have a supported video suffix (see :data:`VIDEO_SUFFIXES`).
     """
     # get input data
+    filenames: list[str] | list[list[str]]
     if isinstance(video_paths, list):
         # presumably a list of files
         filenames = video_paths

@@ -317,6 +317,7 @@ def get_data_module(
         )
 
         require_videos(video_dir, purpose='semi-supervised training')
+        assert video_dir is not None  # narrows the type; require_videos raises on None
         view_names = cfg.data.get('view_names', None)
         view_names = list(view_names) if view_names is not None else None
         data_module = UnlabeledDataModule(
