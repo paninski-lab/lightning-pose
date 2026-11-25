@@ -70,7 +70,7 @@ from lightning_pose.data.datatypes import (
     UnlabeledBatchDict,
 )
 from lightning_pose.data.utils import count_frames
-from lightning_pose.data.video.utils import build_batch_dict
+from lightning_pose.data.video.utils import build_batch_dict, require_video_files
 
 # to ignore imports for sphinx-autoapidoc
 __all__: list[str] = []
@@ -419,10 +419,7 @@ class PrepareDALI:
             filenames_2d = [filenames]  # type: ignore[list-item]
         else:
             filenames_2d = filenames  # type: ignore[assignment]
-        for view_list in filenames_2d:
-            for vid in view_list:
-                if not os.path.exists(vid) or not os.path.isfile(vid):
-                    raise FileNotFoundError(f"{vid} is not a video file!")
+        require_video_files(filenames_2d)
 
         if bbox_df is not None and resize_dims is None:
             raise ValueError('resize_dims is required when bbox_df is provided.')
