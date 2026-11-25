@@ -24,6 +24,7 @@ from lightning_pose.utils.io import (
     is_video_file,
     list_video_files,
     require_videos,
+    resolve_path,
     return_absolute_data_paths,
     return_absolute_path,
     split_video_files_by_view,
@@ -127,6 +128,39 @@ class TestReturnAbsoluteDataPaths:
         cfg = DictConfig({'data_dir': str(tmp_path / 'missing'), 'video_dir': 'videos'})
         with pytest.raises(OSError):
             return_absolute_data_paths(cfg)
+
+
+class TestResolvePath:
+    """Test the function resolve_path."""
+
+    def test_resolve_path_relative_to_root(self, tmp_path):
+        (tmp_path / 'labels.csv').touch()
+        assert resolve_path('labels.csv', tmp_path) == tmp_path / 'labels.csv'
+
+    def test_resolve_path_absolute(self, tmp_path):
+        root = tmp_path / 'root'
+        root.mkdir()
+        (tmp_path / 'labels.csv').touch()
+        assert resolve_path(tmp_path / 'labels.csv', root) == tmp_path / 'labels.csv'
+
+    def test_resolve_path_prefers_root_over_cwd(self, tmp_path, monkeypatch):
+        root = tmp_path / 'root'
+        root.mkdir()
+        (root / 'labels.csv').touch()
+        (tmp_path / 'labels.csv').touch()
+        monkeypatch.chdir(tmp_path)
+        assert resolve_path('labels.csv', root) == root / 'labels.csv'
+
+    def test_resolve_path_falls_back_to_cwd(self, tmp_path, monkeypatch):
+        root = tmp_path / 'root'
+        root.mkdir()
+        (tmp_path / 'labels.csv').touch()
+        monkeypatch.chdir(tmp_path)
+        assert resolve_path('labels.csv', root) == Path('labels.csv')
+
+    def test_resolve_path_missing_lists_locations(self, tmp_path):
+        with pytest.raises(FileNotFoundError, match='labels.csv.*looked in'):
+            resolve_path('labels.csv', tmp_path)
 
 
 class TestReturnAbsolutePath:

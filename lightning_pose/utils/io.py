@@ -28,6 +28,7 @@ __all__ = [
     "LabeledData",
     "parse_label_csv",
     "return_absolute_path",
+    "resolve_path",
     "return_absolute_data_paths",
     "extract_session_name_from_video",
     "find_video_files_for_views",
@@ -329,6 +330,30 @@ def return_absolute_path(possibly_relative_path: str, n_dirs_back: int = 3) -> s
     if not abs_path.exists():
         raise OSError(f"{abs_path} is not a valid path")
     return str(abs_path)
+
+
+def resolve_path(path: str | Path, root_directory: str | Path) -> Path:
+    """Resolve a path that is relative to a project root directory, or absolute.
+
+    Candidates are tried in order: ``root_directory / path`` (which is just ``path`` when it is
+    absolute), then ``path`` as given (relative to the current working directory).
+
+    Args:
+        path: file path, relative to ``root_directory`` or absolute.
+        root_directory: directory that relative paths are anchored to.
+
+    Returns:
+        path to the first existing candidate.
+
+    Raises:
+        FileNotFoundError: if no candidate exists; the message lists the locations searched.
+    """
+    candidates = [Path(root_directory) / path, Path(path)]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    searched = ', '.join(str(c) for c in dict.fromkeys(candidates))
+    raise FileNotFoundError(f'could not find {path}; looked in: {searched}')
 
 
 def return_absolute_data_paths(

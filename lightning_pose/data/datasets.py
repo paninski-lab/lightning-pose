@@ -29,7 +29,6 @@ the full step-by-step, including the ``imgaug_hflip``-reset requirements in
 """
 
 import logging
-import os
 from pathlib import Path
 from typing import Literal, cast
 
@@ -96,11 +95,10 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         The csv file of labels will be searched for in the following order:
         1. assume csv is located at `root_directory/csv_path` (i.e. `csv_path`
             argument is a path relative to `root_directory`)
-        2. if not found, assume `csv_path` is absolute. Note the image paths
-            within the csv must still be relative to `root_directory`
-        3. if not found, assume dlc directory structure:
-           `root_directory/training-data/iteration-0/csv_path` (`csv_path`
-           argument will look like "CollectedData_<scorer>.csv")
+        2. if not found, assume `csv_path` is absolute (or relative to the current working
+            directory). Note the image paths within the csv must still be relative to
+            `root_directory`
+        If neither exists a ``FileNotFoundError`` listing both locations is raised.
 
         Args:
             root_directory: path to data directory
@@ -143,12 +141,9 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
         self.imgaug_transform = imgaug_transform
 
         # load csv data
-        if os.path.isfile(csv_path):
-            csv_file = csv_path
-        else:
-            csv_file = os.path.join(root_directory, csv_path)
+        csv_file = io_utils.resolve_path(csv_path, root_directory)
 
-        labeled_data = io_utils.parse_label_csv(csv_file, header_rows=header_rows)
+        labeled_data = io_utils.parse_label_csv(str(csv_file), header_rows=header_rows)
         self.keypoint_names = labeled_data.keypoint_names
         self.image_names = labeled_data.image_names
         self.keypoints = labeled_data.keypoints
@@ -187,12 +182,7 @@ class BaseTrackingDataset(torch.utils.data.Dataset):
 
         # load bounding box data
         if bbox_path:
-            if os.path.isfile(bbox_path):
-                bbox_file = bbox_path
-            else:
-                bbox_file = os.path.join(root_directory, bbox_path)
-            if not os.path.exists(bbox_file):
-                raise FileNotFoundError(f"Could not find bbox file at {bbox_file}!")
+            bbox_file = io_utils.resolve_path(bbox_path, root_directory)
             bboxes_df = pd.read_csv(bbox_file, header=[0], index_col=0)
             assert bboxes_df.index.tolist() == self.image_names
             bboxes = bboxes_df.to_numpy()
@@ -712,7 +702,7 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         Raises:
             AssertionError: if camera names don't match self.view_names
         """
-        camgroup = CameraGroup.load(os.path.join(self.root_directory, calib_file))
+        camgroup = CameraGroup.load(str(Path(self.root_directory) / calib_file))
         cam_names = camgroup.get_names()
         assert np.all(cam_names == self.view_names), (
             "cfg.data.view_names must have same camera order as camera calibration file; "
