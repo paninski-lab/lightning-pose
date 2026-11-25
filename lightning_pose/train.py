@@ -33,10 +33,10 @@ from lightning_pose.models import get_model
 from lightning_pose.utils import pretty_print_cfg, pretty_print_str
 from lightning_pose.utils.device import get_accelerator
 from lightning_pose.utils.io import (
-    has_videos,
     return_absolute_data_paths,
     return_absolute_path,
 )
+from lightning_pose.utils.io_video import has_videos
 
 logger = logging.getLogger(__name__)
 

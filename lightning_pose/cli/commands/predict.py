@@ -361,7 +361,7 @@ def _predict_cropzoom(args: argparse.Namespace) -> None:
     """
     # delay these imports because they're slow
     from lightning_pose.pipelines import CropZoomPipeline
-    from lightning_pose.utils.io import is_video_file, list_video_files
+    from lightning_pose.utils.io_video import is_video_file, list_video_files
 
     sizing, anchor_keypoints = resolve_bbox_sizing(
         args.crop_ratio, args.crop_size, args.anchor_keypoints,
@@ -427,7 +427,7 @@ def _predict_multi_type(
             inside this directory is used. For video inputs, ``<stem>_bbox.csv`` is used.
     """
     # delay this import because it's slow
-    from lightning_pose.utils.io import is_video_file, list_video_files
+    from lightning_pose.utils.io_video import is_video_file, list_video_files
 
     if path.is_dir():
         image_files = [p for p in path.iterdir() if p.is_file() and p.suffix in [".png", ".jpg"]]
@@ -503,7 +503,7 @@ def _predict_multi_type_multi_view(
             video. When provided, each view is cropped to its bboxes before inference.
     """
     # delay this import because it's slow
-    from lightning_pose.utils.io import (
+    from lightning_pose.utils.io_video import (
         extract_session_name_from_video,
         group_videos_by_session,
         is_video_file,

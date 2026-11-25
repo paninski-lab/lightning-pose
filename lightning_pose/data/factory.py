@@ -41,7 +41,7 @@ from lightning_pose.data.datasets import (
     MultiviewHeatmapDataset,
     has_calibration_files,
 )
-from lightning_pose.utils.io import require_videos
+from lightning_pose.utils.io_video import require_videos
 
 # to ignore imports for sphinx-autoapidoc
 __all__: list[str] = []

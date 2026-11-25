@@ -94,7 +94,7 @@ def handle(args: argparse.Namespace) -> None:
     """Handle the create_bbox command."""
     import lightning_pose.utils.cropzoom as cz  # noqa: F811
     from lightning_pose.api import Model  # noqa: F811
-    from lightning_pose.utils.io import is_video_file, list_video_files
+    from lightning_pose.utils.io_video import is_video_file, list_video_files
 
     model = Model.from_dir(args.model_dir)
 

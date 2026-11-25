@@ -41,7 +41,7 @@ from lightning_pose.data.utils import (
     compute_num_train_frames,
     split_sizes_from_probabilities,
 )
-from lightning_pose.utils.io import normalize_video_paths
+from lightning_pose.utils.io_video import normalize_video_paths
 
 logger = logging.getLogger(__name__)
 

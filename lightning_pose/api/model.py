@@ -26,8 +26,8 @@ from lightning_pose.data.datamodules import BaseDataModule, UnlabeledDataModule
 from lightning_pose.data.datatypes import MultiviewPredictionResult, PredictionResult
 from lightning_pose.metrics import compute_metrics_single
 from lightning_pose.models import ALLOWED_MODELS
-from lightning_pose.utils import io as io_utils
 from lightning_pose.utils.inference_types import _Precision, _Reader, _Runtime
+from lightning_pose.utils.io_video import match_videos_to_views
 from lightning_pose.utils.predictions import generate_labeled_video as generate_labeled_video_fn
 from lightning_pose.utils.predictions import (
     predict_dataset,
@@ -864,7 +864,7 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Arranges video_file_per_view to be in the same order as cfg.data.view_names.
-        _view_to_video_file: dict[str, Path] = io_utils.match_videos_to_views(
+        _view_to_video_file: dict[str, Path] = match_videos_to_views(
             video_file_per_view, view_names
         )
         video_file_per_view = [

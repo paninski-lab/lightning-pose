@@ -24,8 +24,8 @@ import torch
 from omegaconf import DictConfig, OmegaConf
 from PIL import Image
 
-from lightning_pose.utils.io import has_videos as _has_videos
 from lightning_pose.utils.io import parse_label_csv
+from lightning_pose.utils.io_video import has_videos as _has_videos
 
 logger = logging.getLogger(__name__)
 

@@ -10,10 +10,10 @@ from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 
 from lightning_pose.data.datasets import has_calibration_files
 from lightning_pose.models import ALLOWED_MODEL_TYPES
-from lightning_pose.utils.io import (
+from lightning_pose.utils.io import return_absolute_path
+from lightning_pose.utils.io_video import (
     group_videos_in_dir_by_session,
     normalize_video_paths,
-    return_absolute_path,
 )
 
 # to ignore imports for sphinx-autoapidoc
