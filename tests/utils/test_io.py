@@ -437,6 +437,24 @@ def test_get_videos_in_dir(toy_data_dir, tmpdir):
         get_videos_in_dir(test_4_dir, view_names=view_names)
 
 
+class TestCheckVideoPathsSuffix:
+    """Test suffix validation in the function check_video_paths."""
+
+    def test_check_video_paths_unsupported_suffix_raises(self, tmp_path):
+        (tmp_path / 'a.avi').touch()
+        with pytest.raises(ValueError, match=r'unsupported files.*a\.avi'):
+            check_video_paths([str(tmp_path / 'a.avi')])
+
+    def test_check_video_paths_unsupported_suffix_multiview_lists_offenders(self, tmp_path):
+        files = [[str(tmp_path / 'a_v0.mp4')], [str(tmp_path / 'a_v1.mov')]]
+        with pytest.raises(ValueError, match=r'a_v1\.mov'):
+            check_video_paths(files)
+
+    def test_check_video_paths_uppercase_suffix_ok(self, tmp_path):
+        (tmp_path / 'a.MP4').touch()
+        assert check_video_paths(str(tmp_path)) == [str(tmp_path / 'a.MP4')]
+
+
 def test_check_video_paths(toy_data_dir, tmpdir):
     videos_dir = os.path.join(toy_data_dir, "videos")
 

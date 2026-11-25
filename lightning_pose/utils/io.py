@@ -406,10 +406,8 @@ def get_videos_in_dir(
 ) -> list[str] | list[list[str]]:
     """Gather videos to process from a single directory."""
     assert os.path.isdir(video_dir)
-    # get all video files in directory, from allowed formats
-    allowed_formats = (".mp4", ".avi", ".mov")
-    if return_mp4_only:
-        allowed_formats = ".mp4"
+    # get all video files in directory, from allowed formats (compared case-insensitively)
+    allowed_formats = VIDEO_SUFFIXES if return_mp4_only else ('.mp4', '.avi', '.mov')
     if view_names:
         # make a list of lists, where the outer list is over views, each inner list is over videos/
         # sessions
@@ -419,7 +417,7 @@ def get_videos_in_dir(
                 os.path.join(video_dir, f)
                 for f in all_video_files
                 if (
-                    f.endswith(allowed_formats)
+                    f.lower().endswith(allowed_formats)
                     and re.search(
                         rf"(?<![0-9a-zA-Z]){re.escape(view)}(?![0-9a-zA-Z])", f
                     )
@@ -453,7 +451,7 @@ def get_videos_in_dir(
         video_files = [
             os.path.join(video_dir, f)
             for f in os.listdir(video_dir)
-            if f.endswith(allowed_formats)
+            if f.lower().endswith(allowed_formats)
         ]
 
     if len(video_files) == 0:
@@ -557,7 +555,8 @@ def check_video_paths(
         For multi-view: ``list[list[str]]`` where outer list indexes views.
 
     Raises:
-        ValueError: if ``video_paths`` is not a valid file, list, or directory.
+        ValueError: if ``video_paths`` is not a valid file, list, or directory, or if any of the
+            resulting files does not have a supported video suffix (see :data:`VIDEO_SUFFIXES`).
     """
     # get input data
     if isinstance(video_paths, list):
@@ -573,11 +572,17 @@ def check_video_paths(
         raise ValueError(
             "`video_paths_list` must be a list of files, a single file, or a directory name"
         )
-    for filename in filenames:
-        if isinstance(filename, str):
-            filename = [filename]
-        for f in filename:
-            assert f.endswith(".mp4"), "video files must be mp4 format!"
+    unsupported = [
+        f
+        for filename in filenames
+        for f in ([filename] if isinstance(filename, str) else filename)
+        if not is_video_file(f)
+    ]
+    if unsupported:
+        raise ValueError(
+            f'video files must be one of {VIDEO_SUFFIXES} (h.264 codec); '
+            f'unsupported files: {unsupported}'
+        )
 
     return filenames
 
