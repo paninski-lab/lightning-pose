@@ -121,7 +121,7 @@ class TestTestVideoFilesSingleview:
             _mc(_multiview_cfg_dict()).test_video_files_singleview()
 
     def test_test_video_files_singleview_returns_paths(self):
-        """Returns list of Paths produced by check_video_paths."""
+        """Returns list of Paths produced by normalize_video_paths."""
         cfg = _singleview_cfg_dict()
         cfg['eval'] = {'test_videos_directory': '/fake/videos'}
         with (
@@ -130,7 +130,7 @@ class TestTestVideoFilesSingleview:
                 return_value='/fake/videos',
             ),
             patch(
-                'lightning_pose.api.model_config.check_video_paths',
+                'lightning_pose.api.model_config.normalize_video_paths',
                 return_value=['/fake/videos/a.mp4', '/fake/videos/b.mp4'],
             ),
         ):
@@ -151,12 +151,12 @@ class TestTestVideoFilesMultiview:
             _mc(_singleview_cfg_dict()).test_video_files_multiview()
 
     def test_test_video_files_multiview_returns_grouped_paths(self):
-        """Returns the list of per-session path groups from find_video_files_for_views."""
+        """Returns the list of per-session path groups from group_videos_in_dir_by_session."""
         cfg = _multiview_cfg_dict()
         cfg['eval'] = {'test_videos_directory': '/fake/videos'}
         fake_result = [[Path('/fake/videos/cam0.mp4'), Path('/fake/videos/cam1.mp4')]]
         with patch(
-            'lightning_pose.api.model_config.find_video_files_for_views',
+            'lightning_pose.api.model_config.group_videos_in_dir_by_session',
             return_value=fake_result,
         ):
             result = _mc(cfg).test_video_files_multiview()

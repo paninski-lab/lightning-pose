@@ -13,21 +13,23 @@ from omegaconf import DictConfig
 
 from lightning_pose.utils import io as io_utils
 from lightning_pose.utils.io import (
-    check_video_paths,
     ckpt_path_from_base_path,
-    collect_video_files_by_view,
     extract_session_name_from_video,
-    find_video_files_for_views,
+    extract_view_name_from_video,
+    filename_matches_view,
     get_context_img_paths,
     get_videos_in_dir,
+    group_videos_by_session,
+    group_videos_in_dir_by_session,
     has_videos,
     is_video_file,
     list_video_files,
+    match_videos_to_views,
+    normalize_video_paths,
     require_videos,
     resolve_path,
     return_absolute_data_paths,
     return_absolute_path,
-    split_video_files_by_view,
 )
 
 
@@ -67,6 +69,67 @@ class TestListVideoFiles:
         (tmp_path / 'sub').mkdir()
         (tmp_path / 'sub' / 'a.mp4').touch()
         assert list_video_files(tmp_path) == []
+
+
+class TestFilenameMatchesView:
+    """Test the function filename_matches_view."""
+
+    @pytest.mark.parametrize('name', ['mouse_top_3.mp4', 'top.mp4', 'a-top.mp4', 'mouse_top'])
+    def test_filename_matches_view_true(self, name):
+        assert filename_matches_view(name, 'top')
+
+    @pytest.mark.parametrize(
+        'name', ['mousetop.mp4', 'mousetop3.mp4', 'topdown.mp4', 'a_stop.mp4'],
+    )
+    def test_filename_matches_view_false(self, name):
+        assert not filename_matches_view(name, 'top')
+
+    def test_filename_matches_view_prefix_view_names_are_distinct(self):
+        assert filename_matches_view('sess_cam10.mp4', 'cam10')
+        assert not filename_matches_view('sess_cam10.mp4', 'cam1')
+
+    def test_filename_matches_view_ignores_directory(self):
+        assert not filename_matches_view('/data/top/vid.mp4', 'top')
+
+
+class TestMatchVideosToViews:
+    """Test the function match_videos_to_views."""
+
+    def test_match_videos_to_views_requires_left_boundary(self):
+        with pytest.raises(ValueError, match='File not found for view: top'):
+            match_videos_to_views([Path('mousetop.mp4'), Path('mouse_bot.mp4')], ['top', 'bot'])
+
+    def test_match_videos_to_views_ok(self):
+        files = [Path('m_bot.mp4'), Path('m_top.mp4')]
+        assert match_videos_to_views(files, ['top', 'bot']) == {
+            'top': Path('m_top.mp4'),
+            'bot': Path('m_bot.mp4'),
+        }
+
+
+class TestExtractViewAndSessionNames:
+    """Test extract_view_name_from_video and extract_session_name_from_video."""
+
+    def test_extract_view_name_prefix_view_names(self):
+        assert extract_view_name_from_video('sess_cam10.mp4', ['cam1', 'cam10']) == 'cam10'
+        assert extract_view_name_from_video('sess_cam1.mp4', ['cam1', 'cam10']) == 'cam1'
+
+    def test_extract_view_name_none(self):
+        assert extract_view_name_from_video('sess.mp4', ['top']) is None
+
+    def test_extract_session_name_prefix_view_names(self):
+        views = ['cam1', 'cam10']
+        assert extract_session_name_from_video('sess0_cam10.mp4', views) == 'sess0'
+        assert extract_session_name_from_video('sess0_cam1.mp4', views) == 'sess0'
+
+    def test_extract_session_name_no_view_returns_stem(self):
+        assert extract_session_name_from_video('sess0.mp4', ['top']) == 'sess0'
+
+    def test_extract_session_name_warns_on_wrong_delimiter(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            name = extract_session_name_from_video('sess0-top.mp4', ['top'])
+        assert name == 'sess0-top'
+        assert 'not as a' in caplog.text
 
 
 class TestHasVideos:
@@ -445,32 +508,32 @@ def test_get_videos_in_dir(toy_data_dir, tmpdir):
         get_videos_in_dir(test_4_dir, view_names=view_names)
 
 
-class TestCheckVideoPathsSuffix:
-    """Test suffix validation in the function check_video_paths."""
+class TestNormalizeVideoPathsSuffix:
+    """Test suffix validation in the function normalize_video_paths."""
 
-    def test_check_video_paths_unsupported_suffix_raises(self, tmp_path):
+    def test_normalize_video_paths_unsupported_suffix_raises(self, tmp_path):
         (tmp_path / 'a.avi').touch()
         with pytest.raises(ValueError, match=r'unsupported files.*a\.avi'):
-            check_video_paths([str(tmp_path / 'a.avi')])
+            normalize_video_paths([str(tmp_path / 'a.avi')])
 
-    def test_check_video_paths_unsupported_suffix_multiview_lists_offenders(self, tmp_path):
+    def test_normalize_video_paths_unsupported_suffix_multiview_lists_offenders(self, tmp_path):
         files = [[str(tmp_path / 'a_v0.mp4')], [str(tmp_path / 'a_v1.mov')]]
         with pytest.raises(ValueError, match=r'a_v1\.mov'):
-            check_video_paths(files)
+            normalize_video_paths(files)
 
-    def test_check_video_paths_uppercase_suffix_ok(self, tmp_path):
+    def test_normalize_video_paths_uppercase_suffix_ok(self, tmp_path):
         (tmp_path / 'a.MP4').touch()
-        assert check_video_paths(str(tmp_path)) == [str(tmp_path / 'a.MP4')]
+        assert normalize_video_paths(str(tmp_path)) == [str(tmp_path / 'a.MP4')]
 
 
-def test_check_video_paths(toy_data_dir, tmpdir):
+def test_normalize_video_paths(toy_data_dir, tmpdir):
     videos_dir = os.path.join(toy_data_dir, "videos")
 
     # --------------------
     # single view tests
     # --------------------
     # test 1: pass directory, single video
-    video_list = check_video_paths(videos_dir)
+    video_list = normalize_video_paths(videos_dir)
     assert len(video_list) == 1
 
     # test 2: pass directory, two videos
@@ -478,15 +541,15 @@ def test_check_video_paths(toy_data_dir, tmpdir):
     os.makedirs(test_2_dir)
     shutil.copyfile(video_list[0], os.path.join(test_2_dir, "vid1.mp4"))
     shutil.copyfile(video_list[0], os.path.join(test_2_dir, "vid2.mp4"))
-    video_list_2 = check_video_paths(test_2_dir)
+    video_list_2 = normalize_video_paths(test_2_dir)
     assert len(video_list_2) == 2
 
     # test 3: pass list, two videos, should get the list back
-    video_list_3 = check_video_paths(video_list_2)
+    video_list_3 = normalize_video_paths(video_list_2)
     assert all([v1 == v2 for v1, v2 in zip(video_list_2, video_list_3, strict=True)])
 
     # test 4: pass single file, get list with that file back
-    video_list_4 = check_video_paths(video_list[0])
+    video_list_4 = normalize_video_paths(video_list[0])
     assert len(video_list_4) == 1
     assert video_list_4[0] == video_list[0]
 
@@ -504,16 +567,16 @@ def test_check_video_paths(toy_data_dir, tmpdir):
         shutil.copyfile(
             video_list[0], os.path.join(test_5_dir, f"vid1_{view_name}.mp4")
         )
-    video_list_5 = check_video_paths(test_5_dir, view_names=view_names)
+    video_list_5 = normalize_video_paths(test_5_dir, view_names=view_names)
     assert len(video_list_5) == len(view_names)
     for v_list in video_list_5:
         assert isinstance(v_list, list)
         assert len(v_list) == 1
 
 
-def test_collect_video_files_by_view():
+def test_match_videos_to_views():
     # Simple case: files are in reverse order of the views.
-    view_to_file = collect_video_files_by_view(
+    view_to_file = match_videos_to_views(
         [Path("a/simple_top.mp4"), Path("a/simple_bot.mp4")], ["bot", "top"]
     )
     assert view_to_file == {
@@ -523,7 +586,7 @@ def test_collect_video_files_by_view():
 
     # we just match based on view matching, we don't care about diffs in the rest of the string
     # TBD whether this is the desired behavior.
-    view_to_file = collect_video_files_by_view(
+    view_to_file = match_videos_to_views(
         [Path("a/complex_top_2.mp4"), Path("a/simple_bot.mp4")], ["bot", "top"]
     )
     assert view_to_file == {
@@ -532,7 +595,7 @@ def test_collect_video_files_by_view():
     }
 
     # We check the filename stem, not the entire path.
-    view_to_file = collect_video_files_by_view(
+    view_to_file = match_videos_to_views(
         [Path("a/a.mp4"), Path("a/b.mp4")], ["b", "a"]
     )
     assert view_to_file == {
@@ -541,7 +604,7 @@ def test_collect_video_files_by_view():
     }
 
     # View name must be separated by a delimiter.
-    view_to_file = collect_video_files_by_view(
+    view_to_file = match_videos_to_views(
         [Path("a/aview_a.mp4"), Path("a/aview_b.mp4")], ["b", "a"]
     )
     assert view_to_file == {
@@ -578,23 +641,23 @@ def test_get_context_img_paths():
 
     # Too many files.
     with pytest.raises(AssertionError):
-        collect_video_files_by_view(
+        match_videos_to_views(
             [Path("foo.mp4"), Path("bar.mp4"), Path("baz.mp4")], ["foo", "bar"]
         )
 
     # Not enough files.
     with pytest.raises(AssertionError):
-        collect_video_files_by_view([Path("foo.mp4")], ["foo", "bar"])
+        match_videos_to_views([Path("foo.mp4")], ["foo", "bar"])
 
     # two files for foo.
     with pytest.raises(ValueError):
-        collect_video_files_by_view(
+        match_videos_to_views(
             [Path("foo1.mp4"), Path("foo2.mp4")], ["foo", "bar"]
         )
 
     # file for bar not found.
     with pytest.raises(ValueError):
-        collect_video_files_by_view([Path("foo.mp4"), Path("baz.mp4")], ["foo", "bar"])
+        match_videos_to_views([Path("foo.mp4"), Path("baz.mp4")], ["foo", "bar"])
 
 
 def test_extract_session_name_from_video():
@@ -641,7 +704,7 @@ def test_extract_session_name_from_video_warns_on_non_underscore_separator(caplo
     )
 
 
-def test_find_video_files_for_views(toy_data_dir, tmpdir):
+def test_group_videos_in_dir_by_session(toy_data_dir, tmpdir):
     # Create test directory with video files
     test_dir = os.path.join(str(tmpdir), "test_videos")
     os.makedirs(test_dir)
@@ -662,7 +725,7 @@ def test_find_video_files_for_views(toy_data_dir, tmpdir):
     view_names = ["top", "bot"]
 
     # Test 1: find videos for specified views
-    video_files_per_session = find_video_files_for_views(test_dir, view_names)
+    video_files_per_session = group_videos_in_dir_by_session(test_dir, view_names)
     assert len(video_files_per_session) == 1
 
     video_files = video_files_per_session[0]
@@ -672,20 +735,20 @@ def test_find_video_files_for_views(toy_data_dir, tmpdir):
 
     # Test 2: directory doesn't exist
     with pytest.raises(FileNotFoundError):
-        find_video_files_for_views("/nonexistent/dir", view_names)
+        group_videos_in_dir_by_session("/nonexistent/dir", view_names)
 
     # Test 3: no video files in directory
     empty_dir = os.path.join(str(tmpdir), "empty_dir")
     os.makedirs(empty_dir)
     with pytest.raises(FileNotFoundError):
-        find_video_files_for_views(empty_dir, view_names)
+        group_videos_in_dir_by_session(empty_dir, view_names)
 
 
-def test_split_video_files_per_view():
+def test_group_videos_by_session():
     view_names = ["top", "bot"]
 
     # Test 1: one session with two views
-    video_files_per_session = split_video_files_by_view(
+    video_files_per_session = group_videos_by_session(
         [Path("/video_dir/session1_top"), Path("/video_dir/session1_bot")], view_names
     )
     assert len(video_files_per_session) == 1
@@ -696,7 +759,7 @@ def test_split_video_files_per_view():
     assert "bot" in str(video_files[1])
 
     # Test 2: two sessions with two views
-    video_files_per_session = split_video_files_by_view(
+    video_files_per_session = group_videos_by_session(
         [
             Path("/video_dir/session1_top"),
             Path("/video_dir/session1_bot"),
@@ -717,7 +780,7 @@ def test_split_video_files_per_view():
     assert "bot" in str(video_files2[1])
 
     # Test 3: extra unrelated video
-    video_files_per_session = split_video_files_by_view(
+    video_files_per_session = group_videos_by_session(
         [
             Path("/video_dir/session1_top"),
             Path("/video_dir/session1_bot"),
@@ -733,13 +796,13 @@ def test_split_video_files_per_view():
     assert "bot" in str(video_files[1])
 
     # Test 4: no relevant video files
-    video_files_per_session = split_video_files_by_view(
+    video_files_per_session = group_videos_by_session(
         [Path("/video_dir/session1_side")], view_names
     )
     assert len(video_files_per_session) == 0
 
     # Test 5: no video files
-    video_files_per_session = split_video_files_by_view([], view_names)
+    video_files_per_session = group_videos_by_session([], view_names)
     assert len(video_files_per_session) == 0
 
 

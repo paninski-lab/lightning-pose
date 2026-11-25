@@ -864,7 +864,7 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Arranges video_file_per_view to be in the same order as cfg.data.view_names.
-        _view_to_video_file: dict[str, Path] = io_utils.collect_video_files_by_view(
+        _view_to_video_file: dict[str, Path] = io_utils.match_videos_to_views(
             video_file_per_view, view_names
         )
         video_file_per_view = [

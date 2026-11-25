@@ -41,7 +41,7 @@ from lightning_pose.data.utils import (
     compute_num_train_frames,
     split_sizes_from_probabilities,
 )
-from lightning_pose.utils.io import check_video_paths
+from lightning_pose.utils.io import normalize_video_paths
 
 logger = logging.getLogger(__name__)
 
@@ -310,7 +310,7 @@ class UnlabeledDataModule(BaseDataModule):
             torch_seed=torch_seed,
         )
         self.video_paths_list = video_paths_list
-        self.filenames = check_video_paths(self.video_paths_list, view_names=view_names)
+        self.filenames = normalize_video_paths(self.video_paths_list, view_names=view_names)
         self.num_workers_for_unlabeled = 1  # WARNING!! do not increase above 1, weird behavior
         self.dali_config = dali_config
         self.unlabeled_dataloader = None  # initialized in setup_unlabeled

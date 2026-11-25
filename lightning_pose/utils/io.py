@@ -30,16 +30,17 @@ __all__ = [
     "resolve_path",
     "return_absolute_data_paths",
     "extract_session_name_from_video",
-    "find_video_files_for_views",
+    "group_videos_in_dir_by_session",
+    "filename_matches_view",
     "get_videos_in_dir",
-    "check_video_paths",
+    "normalize_video_paths",
     "VIDEO_SUFFIXES",
     "is_video_file",
     "list_video_files",
     "has_videos",
     "require_videos",
     "get_context_img_paths",
-    "split_video_files_by_view",
+    "group_videos_by_session",
 ]
 
 
@@ -380,6 +381,25 @@ def return_absolute_data_paths(
     return data_dir, video_dir
 
 
+def filename_matches_view(filename: str | Path, view_name: str) -> bool:
+    """Return whether a video filename belongs to a view.
+
+    The view name must appear in the filename stem delimited by non-alphanumeric characters (or
+    the start/end of the stem). For example, ``mouse_top_3.mp4`` matches view ``top``, but
+    ``mousetop3.mp4`` does not, and ``sess_cam10.mp4`` matches ``cam10`` but not ``cam1``. This is
+    the single matching rule used for all multiview video-filename parsing.
+
+    Args:
+        filename: video filename or path.
+        view_name: name of the view.
+
+    Returns:
+        ``True`` if the filename contains the view name as a delimited token.
+    """
+    pattern = rf'(?<![0-9a-zA-Z]){re.escape(view_name)}(?![0-9a-zA-Z])'
+    return re.search(pattern, Path(filename).stem) is not None
+
+
 @overload
 def get_videos_in_dir(
     video_dir: str,
@@ -399,25 +419,32 @@ def get_videos_in_dir(
 def get_videos_in_dir(
     video_dir: str, view_names: list[str] | None = None, return_mp4_only: bool = True
 ) -> list[str] | list[list[str]]:
-    """Gather videos to process from a single directory."""
+    """Gather the videos in a directory (strict; compare :func:`group_videos_in_dir_by_session`).
+
+    Args:
+        video_dir: directory containing the videos.
+        view_names: for multiview models, the view names; filenames must contain their view's
+            name delimited by non-alphanumeric characters (see :func:`filename_matches_view`).
+        return_mp4_only: if ``False``, also accept ``.avi`` and ``.mov`` files.
+
+    Returns:
+        Single view (``view_names`` is ``None``): flat list of video paths. Multiview: nested
+        list with one inner list per view (in ``view_names`` order), each holding that view's
+        videos across sessions, i.e. views x sessions.
+
+    Raises:
+        OSError: if no videos are found, or a view has no videos.
+        RuntimeError: if the views do not have the same set of videos.
+    """
     assert Path(video_dir).is_dir()
-    # get all video files in directory, from allowed formats (compared case-insensitively)
-    allowed_formats = VIDEO_SUFFIXES if return_mp4_only else ('.mp4', '.avi', '.mov')
+    suffixes = VIDEO_SUFFIXES if return_mp4_only else ('.mp4', '.avi', '.mov')
+    all_video_files = list_video_files(video_dir, suffixes=suffixes)
+    video_files: list[str] | list[list[str]]
     if view_names:
         # make a list of lists, where the outer list is over views, each inner list is over videos/
         # sessions
-        all_video_files = sorted(f.name for f in Path(video_dir).iterdir())
         video_files = [
-            [
-                str(Path(video_dir) / f)
-                for f in all_video_files
-                if (
-                    f.lower().endswith(allowed_formats)
-                    and re.search(
-                        rf"(?<![0-9a-zA-Z]){re.escape(view)}(?![0-9a-zA-Z])", f
-                    )
-                )
-            ]
+            [str(f) for f in all_video_files if filename_matches_view(f.name, view)]
             for view in view_names
         ]
         # check to make sure we have the same set of videos for each view
@@ -443,11 +470,7 @@ def get_videos_in_dir(
                     "where the `view_name` variable is defined in the config file."
                 )
     else:
-        video_files = [
-            str(Path(video_dir) / f.name)
-            for f in Path(video_dir).iterdir()
-            if f.name.lower().endswith(allowed_formats)
-        ]
+        video_files = [str(f) for f in all_video_files]
 
     if len(video_files) == 0:
         raise OSError(f"Did not find any valid video files in {video_dir}")
@@ -455,25 +478,30 @@ def get_videos_in_dir(
     return video_files
 
 
-def is_video_file(path: str | Path) -> bool:
+def is_video_file(path: str | Path, suffixes: tuple[str, ...] = VIDEO_SUFFIXES) -> bool:
     """Return whether ``path`` has a supported video suffix (case-insensitive).
 
     This only inspects the name; it does not check that the file exists.
 
     Args:
         path: path to test.
+        suffixes: accepted suffixes, including the leading dot.
 
     Returns:
-        ``True`` if the suffix is in :data:`VIDEO_SUFFIXES`.
+        ``True`` if the suffix is in ``suffixes``.
     """
-    return Path(path).suffix.lower() in VIDEO_SUFFIXES
+    return Path(path).suffix.lower() in suffixes
 
 
-def list_video_files(path: str | Path) -> list[Path]:
+def list_video_files(
+    path: str | Path,
+    suffixes: tuple[str, ...] = VIDEO_SUFFIXES,
+) -> list[Path]:
     """List the video files at ``path``, which may be a single file or a directory.
 
     Args:
         path: a video file or a directory of videos (not searched recursively).
+        suffixes: accepted suffixes, including the leading dot.
 
     Returns:
         sorted list of video files; ``[path]`` for a video file, and an empty list if the path
@@ -481,9 +509,9 @@ def list_video_files(path: str | Path) -> list[Path]:
     """
     path = Path(path)
     if path.is_file():
-        return [path] if is_video_file(path) else []
+        return [path] if is_video_file(path, suffixes) else []
     if path.is_dir():
-        return sorted(f for f in path.iterdir() if f.is_file() and is_video_file(f))
+        return sorted(f for f in path.iterdir() if f.is_file() and is_video_file(f, suffixes))
     return []
 
 
@@ -518,20 +546,20 @@ def require_videos(video_dir: str | Path | None, purpose: str) -> None:
 
 
 @overload
-def check_video_paths(
+def normalize_video_paths(
     video_paths: list[str] | str,
     view_names: None = None,
 ) -> list[str]: ...
 
 
 @overload
-def check_video_paths(
+def normalize_video_paths(
     video_paths: list[str] | str,
     view_names: list[str],
 ) -> list[list[str]]: ...
 
 
-def check_video_paths(
+def normalize_video_paths(
     video_paths: list[str] | str,
     view_names: list[str] | None = None,
 ) -> list[str] | list[list[str]]:
@@ -582,14 +610,24 @@ def check_video_paths(
     return filenames
 
 
-def collect_video_files_by_view(
+def match_videos_to_views(
     video_files: list[Path], view_names: list[str]
 ) -> dict[str, Path]:
-    """Given a list of video files, matches them to views based on their filenames.
+    """Match the videos of a single session to views based on their filenames.
 
-    Filenames must contain their corresponding view's name, separated by the rest of the filename
-    by some non-alphanumeric delimiter. For example, mouse_top_3.mp4 is allowed, but mousetop3.mp4
-    is not allowed.
+    Filenames must contain their corresponding view's name, separated from the rest of the
+    filename by some non-alphanumeric delimiter (see :func:`filename_matches_view`). For example,
+    mouse_top_3.mp4 is allowed, but mousetop3.mp4 is not allowed.
+
+    Args:
+        video_files: one video per view.
+        view_names: names of the views.
+
+    Returns:
+        Mapping from view name to video file.
+
+    Raises:
+        ValueError: if a file matches multiple views, or no file is found for a view.
     """
     assert len(video_files) == len(view_names), (
         f"{len(video_files)} != {len(view_names)}"
@@ -598,9 +636,7 @@ def collect_video_files_by_view(
     for view_name in view_names:
         # Search all the video_files for a match.
         for video_file in video_files:
-            if re.search(
-                rf"(?<!0-9a-zA-Z){re.escape(view_name)}(?![0-9a-zA-Z])", video_file.stem
-            ):
+            if filename_matches_view(video_file.name, view_name):
                 if view_name not in video_files_by_view:
                     video_files_by_view[view_name] = video_file
                 else:
@@ -673,60 +709,63 @@ def fix_empty_first_row(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def extract_session_name_from_video(video_filename: str, view_names: list[str]) -> str:
-    """
-    Extract session name from video filename by removing the view name.
-
-    Simple approach: remove the underscore and view name from the filename.
+    """Extract the session name from a video filename by removing the view name.
 
     Args:
-        video_filename: Name of the video file (with or without extension)
-        view_names: List of possible view names to remove
+        video_filename: name of the video file (with or without extension)
+        view_names: list of possible view names to remove
 
     Returns:
-        Session name with view name removed
+        Session name with ``_<view_name>`` removed; the filename stem if no view name matches
+        (see :func:`filename_matches_view`).
     """
-    # Remove file extension if present
     name_without_ext = Path(video_filename).stem
 
-    # Try to remove each view name (with underscore before it)
-    for view_name in view_names:
-        if view_name in name_without_ext:
-            # Remove the underscore and view name
-            session_name = name_without_ext.replace(f"_{view_name}", "")
-            if session_name == name_without_ext:
-                # view name was found but not in the expected "_<view>" form (e.g. a hyphen or
-                # no separator was used instead); the session name below still contains the view
-                # name, so this video likely won't be grouped with its other views
-                logger.warning(
-                    f"video filename '{video_filename}' contains view name '{view_name}' but "
-                    f"not as a '_{view_name}' suffix; expected the pattern "
-                    f"'<session>_{view_name}'. This video may not be grouped correctly with "
-                    "its other views for multiview prediction."
-                )
-            return session_name
+    view_name = extract_view_name_from_video(video_filename, view_names)
+    if view_name is None:
+        return name_without_ext
 
-    # If no view name found, return the original name
-    return name_without_ext
+    session_name = name_without_ext.replace(f"_{view_name}", "")
+    if session_name == name_without_ext:
+        # view name was found but not in the expected "_<view>" form (e.g. a hyphen was used
+        # instead); the session name below still contains the view name, so this video likely
+        # won't be grouped with its other views
+        logger.warning(
+            f"video filename '{video_filename}' contains view name '{view_name}' but "
+            f"not as a '_{view_name}' suffix; expected the pattern "
+            f"'<session>_{view_name}'. This video may not be grouped correctly with "
+            "its other views for multiview prediction."
+        )
+    return session_name
 
 
 def extract_view_name_from_video(
     video_filename: str, view_names: list[str]
 ) -> str | None:
-    """Like extract_session_name_from_video but returns the view name (or None if not found)."""
+    """Return the view name that a video filename matches, or ``None`` if there is none.
+
+    Args:
+        video_filename: name of the video file (with or without extension)
+        view_names: list of possible view names
+
+    Returns:
+        The first view in ``view_names`` that matches (see :func:`filename_matches_view`).
+    """
     for view_name in view_names:
-        if view_name in Path(video_filename).stem:
+        if filename_matches_view(video_filename, view_name):
             return view_name
     return None
 
 
-def split_video_files_by_view(
+def group_videos_by_session(
     video_paths: list[Path],
     view_names: list[str],
 ) -> list[list[Path]]:
-    """
-    For a list of videos from different sessions and views, split them up and return a list of
-    lists like
-    `[[sess0_view0.mp4, sess0_view1.mp4, ...], [sess1_view0.mp4, sess1_view1.mp4, ...], ...]`
+    """Group a list of videos from different sessions and views by session.
+
+    Returns a list of lists like
+    `[[sess0_view0.mp4, sess0_view1.mp4, ...], [sess1_view0.mp4, sess1_view1.mp4, ...], ...]`,
+    i.e. sessions x views. Sessions that are missing a view are skipped.
 
     Args:
         video_paths: List of paths to video files to split
@@ -760,13 +799,14 @@ def split_video_files_by_view(
     return video_views_per_session
 
 
-def find_video_files_for_views(
+def group_videos_in_dir_by_session(
     video_dir: str, view_names: list[str]
 ) -> list[list[Path]]:
-    """
-    Search inside a folder to find a list of videos from different sessions and views, split them
-    up and return a list of lists like
-    `[[sess0_view0.mp4, sess0_view1.mp4, ...], [sess1_view0.mp4, sess1_view1.mp4, ...], ...]`
+    """Group the videos in a directory by session (lenient; compare :func:`get_videos_in_dir`).
+
+    Returns a list of lists like
+    `[[sess0_view0.mp4, sess0_view1.mp4, ...], [sess1_view0.mp4, sess1_view1.mp4, ...], ...]`,
+    i.e. sessions x views. Sessions that are missing a view are skipped.
 
     Args:
         video_dir: Directory containing video files
@@ -775,6 +815,9 @@ def find_video_files_for_views(
     Returns:
         List for each session, each containing a sub-list with videos for each view for
         that session
+
+    Raises:
+        FileNotFoundError: if the directory does not exist or contains no videos.
     """
     video_dir_path = Path(video_dir)
 
@@ -787,4 +830,4 @@ def find_video_files_for_views(
     if not all_video_files:
         raise FileNotFoundError(f"No video files found in {video_dir}")
 
-    return split_video_files_by_view(all_video_files, view_names)
+    return group_videos_by_session(all_video_files, view_names)

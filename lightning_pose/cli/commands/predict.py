@@ -505,14 +505,14 @@ def _predict_multi_type_multi_view(
     # delay this import because it's slow
     from lightning_pose.utils.io import (
         extract_session_name_from_video,
+        group_videos_by_session,
         is_video_file,
         list_video_files,
-        split_video_files_by_view,
     )
 
     # if we pass in all videos, collect them into session batches and process
     if all(is_video_file(path) for path in paths):
-        video_files_split = split_video_files_by_view(
+        video_files_split = group_videos_by_session(
             paths, model.config.cfg.data.view_names
         )
         session_names = [
