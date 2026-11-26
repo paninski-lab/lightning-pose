@@ -94,6 +94,54 @@ class TestPredictDataset:
         )
 
 
+class TestPredictDatasetOutputPaths:
+    """Test how predict_dataset names its output files (no GPU needed)."""
+
+    @pytest.fixture
+    def run(self, tmp_path):
+        """Call predict_dataset with the trainer and handler mocked out."""
+        view_dfs = {'top': pd.DataFrame({'a': [1]}), 'bot': pd.DataFrame({'a': [2]})}
+
+        def _run(preds_file, preds_df):
+            model = MagicMock()
+            model.config.cfg.data.view_names = ['top', 'bot']
+            with (
+                patch('lightning_pose.utils.predictions.pl.Trainer') as trainer_cls,
+                patch('lightning_pose.utils.predictions.PredictionHandler') as handler_cls,
+            ):
+                trainer_cls.return_value.predict.return_value = []
+                handler_cls.return_value.return_value = preds_df
+                return predict_dataset(
+                    model=model, data_module=MagicMock(), preds_file=preds_file,
+                )
+
+        return _run, view_dfs
+
+    def test_single_path_expands_per_view_with_suffix(self, tmp_path, run):
+        _run, view_dfs = run
+        _run(tmp_path / 'predictions.csv', view_dfs)
+        assert (tmp_path / 'predictions_top.csv').exists()
+        assert (tmp_path / 'predictions_bot.csv').exists()
+
+    def test_single_path_in_dir_with_csv_in_name_only_edits_the_filename(self, tmp_path, run):
+        _run, view_dfs = run
+        out_dir = tmp_path / 'run.csv'
+        out_dir.mkdir()
+        _run(str(out_dir / 'predictions.csv'), view_dfs)
+        assert (out_dir / 'predictions_top.csv').exists()
+
+    def test_list_of_paths_uses_given_locations(self, tmp_path, run):
+        _run, view_dfs = run
+        files = [tmp_path / 'a.csv', tmp_path / 'b.csv']
+        _run(files, view_dfs)
+        assert all(f.exists() for f in files)
+
+    def test_path_object_single_view(self, tmp_path, run):
+        _run, _ = run
+        _run(tmp_path / 'preds.csv', pd.DataFrame({'a': [1]}))
+        assert (tmp_path / 'preds.csv').exists()
+
+
 class TestPredictVideoBboxFile:
     """Test bbox_file support in predict_video."""
 
@@ -231,6 +279,27 @@ class TestPredictVideoBboxFile:
                     model=mock_model,
                     bbox_file=[bbox_file, bbox_file],
                 )
+
+    def test_path_video_file_is_single_view(self, tmp_path, mock_model, bbox_csv):
+        """A Path video is treated as single-view (not mistaken for a multiview input)."""
+        bbox_file, _ = bbox_csv  # 3 rows
+
+        with patch('lightning_pose.utils.predictions.count_frames', return_value=10):
+            with pytest.raises(ValueError, match='bbox.csv has 3 rows but vid.mp4 has 10 frames'):
+                predict_video(
+                    video_file=tmp_path / 'vid.mp4',
+                    model=mock_model,
+                    bbox_file=bbox_file,
+                )
+
+    def test_raises_when_singleview_output_is_a_list(self, tmp_path, mock_model):
+        """ValueError is raised when a list of output paths is given for a single video."""
+        with pytest.raises(ValueError, match='single path'):
+            predict_video(
+                video_file=tmp_path / 'vid.mp4',
+                model=mock_model,
+                output_pred_file=[tmp_path / 'a.csv'],  # type: ignore[call-overload]
+            )
 
     def test_raises_on_frame_count_mismatch(self, tmp_path, mock_model, bbox_csv):
         """ValueError is raised when bbox_file row count doesn't match video frame count."""

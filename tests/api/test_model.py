@@ -211,8 +211,10 @@ class TestPredictOnVideoFile:
             )
 
         kwargs = mock_pv.call_args.kwargs
-        assert kwargs['video_file'] == [str(videos[1]), str(videos[0])]
-        assert kwargs['bbox_file'] == [str(bbox_files[1]), str(bbox_files[0])]
+        assert [str(v) for v in kwargs['video_file']] == [str(videos[1]), str(videos[0])]
+        assert [str(b) for b in kwargs['bbox_file']] == [
+            str(bbox_files[1]), str(bbox_files[0]),
+        ]
 
     def test_predict_on_video_file_multiview_wrong_bbox_count(self, tmp_path):
         """Raises ValueError when the number of bbox files doesn't match the view count."""

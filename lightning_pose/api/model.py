@@ -765,9 +765,9 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
         prediction_csv_file = output_dir / prediction_csv_name(video_file)
 
         df = predict_video(
-            video_file=str(video_file),
+            video_file=video_file,
             model=self,
-            output_pred_file=str(prediction_csv_file),
+            output_pred_file=prediction_csv_file,
             progress_file=progress_file,
             reader=reader,
             bbox_file=bbox_file,
@@ -882,13 +882,13 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
         ]
 
         df_list = predict_video(
-            video_file=list(map(str, video_file_per_view)),
+            video_file=video_file_per_view,
             model=self,
             output_pred_file=prediction_csv_file_list,
             progress_file=progress_file,
             reader=reader,
             bbox_file=(
-                [str(video_to_bbox_file[v]) for v in video_file_per_view]
+                [video_to_bbox_file[v] for v in video_file_per_view]
                 if video_to_bbox_file is not None else None
             ),
         )
