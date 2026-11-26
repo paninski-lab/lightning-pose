@@ -5,7 +5,6 @@ from __future__ import annotations
 import datetime
 import gc
 import logging
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast, overload
 
@@ -49,7 +48,7 @@ class PredictionHandler:
         self,
         cfg: DictConfig | ListConfig,
         data_module: BaseDataModule | UnlabeledDataModule | None = None,
-        video_file: str | None = None,
+        video_file: str | Path | None = None,
     ) -> None:
         """Initialize a PredictionHandler.
 
@@ -336,7 +335,7 @@ class PredictionHandler:
 def predict_dataset(
     model: Model,
     data_module: BaseDataModule,
-    preds_file: str | list[str],
+    preds_file: str | Path | list[str] | list[Path],
     cfg: DictConfig | ListConfig | None = None,
 ) -> pd.DataFrame | dict[str, pd.DataFrame]:
     """Save predicted keypoints for a labeled dataset.
@@ -344,7 +343,9 @@ def predict_dataset(
     Args:
         model: API model wrapper; its underlying lightning module is used for inference.
         data_module: data module that contains dataloaders for train, val, test splits.
-        preds_file: path for the predictions .csv file.
+        preds_file: path for the predictions .csv file. For multiview data this may instead be a
+            list of paths, one per view in ``cfg.data.view_names`` order; a single path is
+            expanded to ``<stem>_<view_name><suffix>`` for each view.
         cfg: hydra config; if None, falls back to ``model.config.cfg``.
 
     Returns:
@@ -373,11 +374,14 @@ def predict_dataset(
     )
     labeled_preds_df = pred_handler(preds=labeled_preds_typed)
     if isinstance(labeled_preds_df, dict):
-        if isinstance(preds_file, str):
+        if not isinstance(preds_file, list):
             # old logic used to save to <predictions>_<view_name>.csv
+            preds_path = Path(preds_file)
             for view_name, df in labeled_preds_df.items():
-                df.to_csv(preds_file.replace(".csv", f"_{view_name}.csv"))
-        elif isinstance(preds_file, list):
+                view_name_file = f'{preds_path.stem}_{view_name}{preds_path.suffix}'
+                view_file = preds_path.with_name(view_name_file)
+                df.to_csv(view_file)
+        else:
             # preds_file is a list of views corresponding to cfg.data.view_names.
             # this allows the caller to specify the output locations more flexibly.
 
@@ -390,7 +394,9 @@ def predict_dataset(
                 df.to_csv(_pred_file)
 
     else:
-        assert isinstance(preds_file, str), 'preds_file must be a str for single-view predictions'
+        assert not isinstance(preds_file, list), (
+            'preds_file must be a single path for single-view predictions'
+        )
         labeled_preds_df.to_csv(preds_file)
 
     # clear up memory
@@ -402,7 +408,7 @@ def predict_dataset(
 
 
 def _load_bbox_dfs(
-    video_file: str | list[str],
+    video_file: str | Path | list[str] | list[Path],
     bbox_file: str | Path | list[str] | list[Path],
 ) -> pd.DataFrame | list[pd.DataFrame]:
     """Load bbox CSVs and check that each has one row per frame of its video.
@@ -419,7 +425,7 @@ def _load_bbox_dfs(
         ValueError: if the form of ``bbox_file`` does not match ``video_file``, or if a bbox
             CSV's row count differs from its video's frame count.
     """
-    if isinstance(video_file, str):
+    if not isinstance(video_file, list):
         if isinstance(bbox_file, list):
             raise ValueError('bbox_file must be a single path for single-view prediction')
         video_files, bbox_files = [video_file], [bbox_file]
@@ -441,14 +447,14 @@ def _load_bbox_dfs(
                 f'{frame_count} frames'
             )
         bbox_dfs.append(bbox_df)
-    return bbox_dfs[0] if isinstance(video_file, str) else bbox_dfs
+    return bbox_dfs if isinstance(video_file, list) else bbox_dfs[0]
 
 
 @overload
 def predict_video(
-    video_file: str,
+    video_file: str | Path,
     model: Model,
-    output_pred_file: str | None = None,
+    output_pred_file: str | Path | None = None,
     progress_file: Path | None = None,
     reader: _Reader | None = None,
     bbox_file: str | Path | None = None,
@@ -457,9 +463,9 @@ def predict_video(
 
 @overload
 def predict_video(
-    video_file: list[str],
+    video_file: list[str] | list[Path],
     model: Model,
-    output_pred_file: list[str] | None = None,
+    output_pred_file: list[str] | list[Path] | None = None,
     progress_file: Path | None = None,
     reader: _Reader | None = None,
     bbox_file: list[str] | list[Path] | None = None,
@@ -467,9 +473,9 @@ def predict_video(
 
 
 def predict_video(
-    video_file: str | list[str],
+    video_file: str | Path | list[str] | list[Path],
     model: Model,
-    output_pred_file: str | list[str] | None = None,
+    output_pred_file: str | Path | list[str] | list[Path] | None = None,
     progress_file: Path | None = None,
     reader: _Reader | None = None,
     bbox_file: str | Path | list[str] | list[Path] | None = None,
@@ -493,7 +499,15 @@ def predict_video(
             and --compile -- this only controls video ingestion.
     """
 
-    is_multiview = not isinstance(video_file, str)
+    # a list means multiview (one video per view); a single str/Path means single view
+    is_multiview = isinstance(video_file, list)
+    video_paths = (
+        [str(f) for f in video_file] if isinstance(video_file, list) else [str(video_file)]
+    )
+    if not is_multiview and isinstance(output_pred_file, list):
+        raise ValueError(
+            "for single-view prediction, 'output_pred_file' should be a single path, not a list"
+        )
 
     if is_multiview:
         # Validate output_pred_file is a list
@@ -506,7 +520,7 @@ def predict_video(
         # sanity check 1-1 correspondence of video_file to cfg.data.view_names
         # important since PredictionHandler relies on correspondence to organize the outputted dict
         for single_video_file, view_name in zip(
-            video_file, model.config.cfg.data.view_names, strict=True
+            video_paths, model.config.cfg.data.view_names, strict=True
         ):
             assert (
                 view_name in Path(single_video_file).stem
@@ -529,7 +543,7 @@ def predict_video(
         "context" if model.config.cfg.model.model_type == "heatmap_mhcrnn" else "base"
     )
 
-    filenames = [video_file] if not is_multiview else [[f] for f in video_file]
+    filenames = [[f] for f in video_paths] if is_multiview else video_paths
     resize_dims = [
         model.config.cfg.data.image_resize_dims.height,
         model.config.cfg.data.image_resize_dims.width,
@@ -539,7 +553,7 @@ def predict_video(
     # view's video since availability checks need a real file. Deliberately done
     # here rather than in the CLI handler, so every caller (CLI, direct Model
     # API/notebook use) gets the same fail-fast behavior and log line for free.
-    probe_video = video_file[0] if is_multiview else video_file
+    probe_video = video_paths[0]
     predict_loader = build_video_reader(
         reader=reader,
         probe_video=probe_video,
@@ -553,7 +567,7 @@ def predict_video(
     # initialize prediction handler class
     pred_handler = PredictionHandler(
         cfg=model.config.cfg,
-        video_file=video_file[0] if is_multiview else video_file,
+        video_file=video_paths[0],
     )
 
     # compute predictions
@@ -576,13 +590,13 @@ def predict_video(
     if output_pred_file is not None:
         # save the predictions to a csv; create directory if it doesn't exist
 
-        if is_multiview:
+        if isinstance(output_pred_file, list):
             for df, output_file in zip(preds_df, output_pred_file, strict=True):
-                os.makedirs(os.path.dirname(output_file), exist_ok=True)
+                Path(output_file).parent.mkdir(parents=True, exist_ok=True)
                 df.to_csv(output_file)
         else:
             assert isinstance(preds_df, pd.DataFrame)
-            assert isinstance(output_pred_file, str)
+            Path(output_pred_file).parent.mkdir(parents=True, exist_ok=True)
             preds_df.to_csv(output_pred_file)
 
     # clear up memory
@@ -641,7 +655,7 @@ def _create_labeled_video(
     dotsize: int = 4,
     colormap: str | None = "cool",
     fps: float | None = None,
-    output_video_path: str = "movie.mp4",
+    output_video_path: str | Path = "movie.mp4",
     start_time: float = 0.0,
     bbox_arr: np.ndarray | None = None,
 ) -> None:
@@ -780,15 +794,15 @@ def _create_labeled_video(
 
     clip_marked = clip.transform(add_marker_and_timestamps)
     clip_marked.write_videofile(
-        output_video_path, codec="libx264", fps=fps or fps_og or 20.0
+        str(output_video_path), codec="libx264", fps=fps or fps_og or 20.0
     )
     clip_marked.close()
 
 
 def generate_labeled_video(
-    video_file: str,
+    video_file: str | Path,
     preds_df: pd.DataFrame,
-    output_mp4_file: str,
+    output_mp4_file: str | Path,
     confidence_thresh_for_vid: float,
     colormap: str,
     bbox_df: pd.DataFrame | None = None,
@@ -806,14 +820,14 @@ def generate_labeled_video(
             coordinates of ``video_file``); when given, the bbox is drawn on each frame in
             bright green.
     """
-    os.makedirs(os.path.dirname(output_mp4_file), exist_ok=True)
+    Path(output_mp4_file).parent.mkdir(parents=True, exist_ok=True)
     # transform df to numpy array
     keypoints_arr = np.reshape(preds_df.to_numpy(), [preds_df.shape[0], -1, 3])
     xs_arr = keypoints_arr[:, :, 0]
     ys_arr = keypoints_arr[:, :, 1]
     mask_array = keypoints_arr[:, :, 2] > confidence_thresh_for_vid
     # video generation
-    video_clip = VideoFileClip(video_file)
+    video_clip = VideoFileClip(str(video_file))
     _create_labeled_video(
         clip=video_clip,
         xs_arr=xs_arr,

@@ -105,14 +105,14 @@ def handle(args: argparse.Namespace) -> None:
     """Handle the crop command."""
     import lightning_pose.utils.cropzoom as cz  # noqa: F811
     from lightning_pose.api import Model  # noqa: F811
+    from lightning_pose.utils.io import BBOX_CSV_NAME
+    from lightning_pose.utils.io_video import bbox_csv_name, is_video_file, list_video_files
 
     model_dir = args.model_dir
     model = Model.from_dir(model_dir)
 
-    # Make both cropped_images and cropped_videos dirs. Reason: After this, the user
-    # will train a pose model, and current code in io utils checks that both
-    # data_dir and videos_dir are present. if we just create one or the other,
-    # the check will fail.
+    # make both cropped_images and cropped_videos dirs; the cropped videos dir is used as
+    # data.video_dir when training the pose model on the cropped data
     model.cropped_data_dir().mkdir(parents=True, exist_ok=True)
     model.cropped_videos_dir().mkdir(parents=True, exist_ok=True)
 
@@ -123,16 +123,16 @@ def handle(args: argparse.Namespace) -> None:
         p = Path(p)
         if p.is_dir():
             logger.info(f'processing directory {p}')
-            input_paths.extend(sorted(f for f in p.iterdir() if f.suffix == '.mp4'))
+            input_paths.extend(list_video_files(p))
         else:
             input_paths.append(p)
 
     for input_path in input_paths:
-        if input_path.suffix == '.mp4':
+        if is_video_file(input_path):
             if bbox_dir is not None:
-                input_bbox_file = bbox_dir / (input_path.stem + '_bbox.csv')
+                input_bbox_file = bbox_dir / bbox_csv_name(input_path)
             else:
-                input_bbox_file = model.video_preds_dir() / (input_path.stem + '_bbox.csv')
+                input_bbox_file = model.video_preds_dir() / bbox_csv_name(input_path)
             output_file = model.cropped_videos_dir() / ('cropped_' + input_path.name)
 
             logger.info(f'cropping {input_path.name}')
@@ -147,9 +147,9 @@ def handle(args: argparse.Namespace) -> None:
             cropped_data_dir = model.cropped_data_dir()
 
             if bbox_dir is not None:
-                input_bbox_file = bbox_dir / 'bbox.csv'
+                input_bbox_file = bbox_dir / BBOX_CSV_NAME
             else:
-                input_bbox_file = preds_dir / 'bbox.csv'
+                input_bbox_file = preds_dir / BBOX_CSV_NAME
             output_csv_file_path = preds_dir / ('cropped_' + input_path.name)
 
             logger.info(f'cropping {input_path.name}')

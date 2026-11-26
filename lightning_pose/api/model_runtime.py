@@ -171,8 +171,7 @@ def load_model_from_checkpoint(
         )
 
     if keys_remapped:
-        import os
-        os.unlink(fixed_ckpt_file)
+        Path(fixed_ckpt_file).unlink()
 
     if eval:
         model.eval()

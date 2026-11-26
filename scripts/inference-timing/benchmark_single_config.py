@@ -32,10 +32,10 @@ video per view, in the same order the model's config expects.
 """
 import argparse
 import csv
-import os
 import sys
 import time
 import traceback
+from pathlib import Path
 
 VARIANT_CHOICES = ["eager_fp32", "eager_fp16", "compile_fp16", "onnx_fp16", "tensorrt_fp16"]
 DECODER_CHOICES = ["dali", "pynvvc", "opencv"]
@@ -249,8 +249,9 @@ def detect_gpu_label():
 
 
 def write_rows(output_csv, rows):
-    file_exists = os.path.exists(output_csv)
-    os.makedirs(os.path.dirname(os.path.abspath(output_csv)), exist_ok=True)
+    output_csv = Path(output_csv)
+    file_exists = output_csv.exists()
+    output_csv.absolute().parent.mkdir(parents=True, exist_ok=True)
     with open(output_csv, "a", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
         if not file_exists:

@@ -41,6 +41,7 @@ from lightning_pose.data.datasets import (
     MultiviewHeatmapDataset,
     has_calibration_files,
 )
+from lightning_pose.utils.io_video import require_videos
 
 # to ignore imports for sphinx-autoapidoc
 __all__: list[str] = []
@@ -112,7 +113,7 @@ def get_imgaug_transform(cfg: DictConfig | ListConfig, data_dir: str | Path) -> 
 
 def get_dataset(
     cfg: DictConfig | ListConfig,
-    data_dir: str,
+    data_dir: str | Path,
     imgaug_transform: iaa.Sequential,
 ) -> BaseTrackingDataset | HeatmapDataset | MultiviewHeatmapDataset:
     """Build a labeled dataset from a Hydra config.
@@ -315,7 +316,8 @@ def get_data_module(
             },
         )
 
-        assert video_dir is not None, 'video_dir must be provided for semi-supervised training'
+        require_videos(video_dir, purpose='semi-supervised training')
+        assert video_dir is not None  # narrows the type; require_videos raises on None
         view_names = cfg.data.get('view_names', None)
         view_names = list(view_names) if view_names is not None else None
         data_module = UnlabeledDataModule(

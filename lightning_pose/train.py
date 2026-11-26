@@ -34,7 +34,9 @@ from lightning_pose.utils import pretty_print_cfg, pretty_print_str
 from lightning_pose.utils.device import get_accelerator
 from lightning_pose.utils.io import (
     return_absolute_data_paths,
+    return_absolute_path,
 )
+from lightning_pose.utils.io_video import has_videos
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +55,7 @@ def chdir(dir: str | Path) -> Generator[None, None, None]:
     Yields:
         None; the current working directory is restored on exit.
     """
-    pwd = os.getcwd()
+    pwd = Path.cwd()
     os.chdir(dir)
     try:
         yield
@@ -99,14 +101,14 @@ def train(
         trained Model instance.
     """
     # Default to cwd for backwards compatibility. Future: make model_dir required.
-    model_dir = Path(model_dir or os.getcwd())
+    model_dir = Path(model_dir or Path.cwd())
     model_dir.mkdir(parents=True, exist_ok=True)
     status_file_path = model_dir / "train_status.json"
     with chdir(model_dir):
         model = _train(cfg, status_file=status_file_path)
     # Comment out the above, and uncomment the below to skip
     # training and go straight to post-training analysis:
-    # model = Model.from_dir(os.getcwd())
+    # model = Model.from_dir(Path.cwd())
 
     if not skip_evaluation:
         _evaluate_on_training_dataset(model)
@@ -121,9 +123,10 @@ def train(
     except FileNotFoundError:
         status_file_contents = {}
     status_file_contents["status"] = "COMPLETED"
-    with open(str(status_file_path.with_suffix(".json.tmp")), "w") as f:
+    status_tmp_path = status_file_path.with_suffix(".json.tmp")
+    with open(status_tmp_path, "w") as f:
         json.dump(status_file_contents, f)
-    os.replace(str(status_file_path.with_suffix(".json.tmp")), status_file_path)
+    status_tmp_path.replace(status_file_path)
 
     return model
 
@@ -253,6 +256,17 @@ def _predict_test_videos(model: Model) -> None:
         model: trained model used for prediction.
     """
     if model.config.cfg.eval.predict_vids_after_training:
+        # the video directory is optional for supervised models; skip if it is absent/empty
+        try:
+            test_video_dir = return_absolute_path(model.config.cfg.eval.test_videos_directory)
+        except (OSError, TypeError):  # missing path, or null in the config
+            test_video_dir = None
+        if not has_videos(test_video_dir):
+            logger.info(
+                f'no videos found in cfg.eval.test_videos_directory '
+                f'({model.config.cfg.eval.test_videos_directory}); skipping video prediction'
+            )
+            return
         pretty_print_str("Predicting videos in cfg.eval.test_videos_directory...")
         # dealing with multiview
         if model.config.is_multi_view():
@@ -347,11 +361,11 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
     # Save configuration in output directory
     # ----------------------------------------------------------------------------------
     # Done before training; files will exist even if script dies prematurely.
-    hydra_output_directory = os.getcwd()
+    hydra_output_directory = Path.cwd()
     logger.info(f'hydra output directory: {hydra_output_directory}')
 
     # save config file
-    dest_config_file = Path(hydra_output_directory) / "config.yaml"
+    dest_config_file = hydra_output_directory / "config.yaml"
     OmegaConf.save(config=cfg, f=dest_config_file, resolve=False)
 
     # save labeled data file(s)
@@ -367,7 +381,7 @@ def _train(cfg: DictConfig | ListConfig, status_file: Path | None = None) -> Mod
         if not src_csv_file.is_absolute():
             src_csv_file = Path(data_dir) / src_csv_file
 
-        dest_csv_file = Path(hydra_output_directory) / src_csv_file.name
+        dest_csv_file = hydra_output_directory / src_csv_file.name
         shutil.copyfile(src_csv_file, dest_csv_file)
 
     # ----------------------------------------------------------------------------------

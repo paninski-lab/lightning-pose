@@ -10,7 +10,30 @@ from lightning_pose.data.video.utils import (
     PreparePredictBase,
     build_batch_dict,
     normalize_frames,
+    require_video_files,
 )
+
+
+class TestRequireVideoFiles:
+    """Test the function require_video_files."""
+
+    def test_require_video_files_existing(self, tmp_path):
+        (tmp_path / 'a.mp4').touch()
+        (tmp_path / 'b.mp4').touch()
+        require_video_files([[str(tmp_path / 'a.mp4')], [str(tmp_path / 'b.mp4')]])
+
+    def test_require_video_files_missing_raises(self, tmp_path):
+        with pytest.raises(FileNotFoundError, match='missing.mp4 is not a video file'):
+            require_video_files([[str(tmp_path / 'missing.mp4')]])
+
+    def test_require_video_files_directory_raises(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            require_video_files([[str(tmp_path)]])
+
+    def test_require_video_files_checks_every_view(self, tmp_path):
+        (tmp_path / 'a.mp4').touch()
+        with pytest.raises(FileNotFoundError):
+            require_video_files([[str(tmp_path / 'a.mp4')], [str(tmp_path / 'b.mp4')]])
 
 
 class TestNormalizeFrames:

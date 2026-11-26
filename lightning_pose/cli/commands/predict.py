@@ -359,8 +359,9 @@ def _predict_cropzoom(args: argparse.Namespace) -> None:
         NotImplementedError: if an input is not a video or directory of videos.
         ValueError: if the bbox sizing options are invalid.
     """
-    # delay this import because it's slow
+    # delay these imports because they're slow
     from lightning_pose.pipelines import CropZoomPipeline
+    from lightning_pose.utils.io_video import is_video_file, list_video_files, prediction_csv_name
 
     sizing, anchor_keypoints = resolve_bbox_sizing(
         args.crop_ratio, args.crop_size, args.anchor_keypoints,
@@ -379,19 +380,20 @@ def _predict_cropzoom(args: argparse.Namespace) -> None:
     for p in (Path(p) for p in args.input_path):
         if p.is_dir():
             logger.info(f'processing directory {p}')
-            video_files.extend(sorted(f for f in p.iterdir() if f.suffix == ".mp4"))
-        elif p.suffix == ".mp4":
+            video_files.extend(list_video_files(p))
+        elif is_video_file(p):
             video_files.append(p)
         else:
             raise NotImplementedError(
-                f"--detector only supports video inputs (.mp4 files or directories of them), "
-                f"got {p}."
+                f'--detector only supports .mp4 video files or directories containing .mp4 '
+                f'videos, got {p} (suffix {p.suffix!r}). Convert other video formats '
+                f'(e.g. .avi, .mov) to .mp4 first, or run `litpose predict` without --detector.'
             )
 
     output_dir = pipeline.pose_estimator.video_preds_dir()
     extra_kwargs = {} if args.batch_size is None else {"batch_size": args.batch_size}
     for video_file in video_files:
-        if not args.overwrite and (output_dir / f"{video_file.stem}.csv").exists():
+        if not args.overwrite and (output_dir / prediction_csv_name(video_file)).exists():
             logger.info(f'skipping {video_file} (prediction file already exists)')
             continue
         pipeline.predict_on_video_file(
@@ -424,9 +426,18 @@ def _predict_multi_type(
         bbox_dir: optional directory containing bbox CSV files. For CSV inputs, ``bbox.csv``
             inside this directory is used. For video inputs, ``<stem>_bbox.csv`` is used.
     """
+    # delay these imports because they're slow
+    from lightning_pose.utils.io import BBOX_CSV_NAME, PREDICTIONS_CSV_NAME
+    from lightning_pose.utils.io_video import (
+        bbox_csv_name,
+        is_video_file,
+        list_video_files,
+        prediction_csv_name,
+    )
+
     if path.is_dir():
         image_files = [p for p in path.iterdir() if p.is_file() and p.suffix in [".png", ".jpg"]]
-        video_files = [p for p in path.iterdir() if p.is_file() and p.suffix == ".mp4"]
+        video_files = list_video_files(path)
 
         if len(image_files) > 0:
             raise NotImplementedError("Predicting on image dir.")
@@ -440,9 +451,9 @@ def _predict_multi_type(
                 reader=reader,
             )
 
-    elif path.suffix == ".mp4":
+    elif is_video_file(path):
         # Check if prediction file already exists
-        prediction_csv_file = model.video_preds_dir() / f"{path.stem}.csv"
+        prediction_csv_file = model.video_preds_dir() / prediction_csv_name(path)
         if skip_existing and prediction_csv_file.exists():
             logger.info(f'skipping {path} (prediction file already exists)')
             return
@@ -451,24 +462,29 @@ def _predict_multi_type(
             video_file=path,
             generate_labeled_video=(not skip_viz),
             progress_file=progress_file,
-            bbox_file=bbox_dir / f'{path.stem}_bbox.csv' if bbox_dir is not None else None,
+            bbox_file=bbox_dir / bbox_csv_name(path) if bbox_dir is not None else None,
             reader=reader,
         )
     elif path.suffix == ".csv":
         # Check if prediction file already exists
-        prediction_csv_file = model.image_preds_dir() / path.name / "predictions.csv"
+        prediction_csv_file = model.image_preds_dir() / path.name / PREDICTIONS_CSV_NAME
         if skip_existing and prediction_csv_file.exists():
             logger.info(f'skipping {path} (prediction file already exists)')
             return
 
         model.predict_on_label_csv(
             csv_file=path,
-            bbox_file=bbox_dir / "bbox.csv" if bbox_dir is not None else None,
+            bbox_file=bbox_dir / BBOX_CSV_NAME if bbox_dir is not None else None,
         )
     elif path.suffix in [".png", ".jpg"]:
         raise NotImplementedError("Not yet implemented: predicting on image files.")
     else:
-        pass
+        logger.warning(
+            f'skipping {path}: unsupported input type {path.suffix!r}. '
+            f'Supported inputs are .mp4 video files, directories of .mp4 videos, and .csv '
+            f'label files. Other video formats (e.g. .avi, .mov) must be converted to .mp4 '
+            f'(h.264 codec) first; see the FAQs on video formats.'
+        )
 
 
 def _predict_multi_type_multi_view(
@@ -493,14 +509,18 @@ def _predict_multi_type_multi_view(
             video. When provided, each view is cropped to its bboxes before inference.
     """
     # delay this import because it's slow
-    from lightning_pose.utils.io import (
+    from lightning_pose.utils.io_video import (
+        bbox_csv_name,
         extract_session_name_from_video,
-        split_video_files_by_view,
+        group_videos_by_session,
+        is_video_file,
+        list_video_files,
+        prediction_csv_name,
     )
 
     # if we pass in all videos, collect them into session batches and process
-    if all(path.suffix == ".mp4" for path in paths):
-        video_files_split = split_video_files_by_view(
+    if all(is_video_file(path) for path in paths):
+        video_files_split = group_videos_by_session(
             paths, model.config.cfg.data.view_names
         )
         session_names = [
@@ -515,7 +535,7 @@ def _predict_multi_type_multi_view(
         )
         for video_file_per_view in video_files_split:
             if skip_existing and all(
-                (model.video_preds_dir() / f"{Path(video).stem}.csv").exists()
+                (model.video_preds_dir() / prediction_csv_name(video)).exists()
                 for video in video_file_per_view
             ):
                 session_name = extract_session_name_from_video(
@@ -527,7 +547,7 @@ def _predict_multi_type_multi_view(
             bbox_file_per_view = None
             if bbox_dir is not None:
                 bbox_file_per_view = [
-                    bbox_dir / f'{Path(video).stem}_bbox.csv' for video in video_file_per_view
+                    bbox_dir / bbox_csv_name(video) for video in video_file_per_view
                 ]
                 missing = [f for f in bbox_file_per_view if not f.exists()]
                 if missing:
@@ -543,9 +563,7 @@ def _predict_multi_type_multi_view(
     # if we have a list of directories, we process the videos in each separately
     elif all(path.is_dir() for path in paths):
         for path in paths:
-            video_files = [
-                p for p in path.iterdir() if p.is_file() and p.suffix == ".mp4"
-            ]
+            video_files = list_video_files(path)
             if len(video_files) > 0:
                 logger.info(f'processing directory {path}')
 
@@ -556,7 +574,14 @@ def _predict_multi_type_multi_view(
             else:
                 logger.info(f'skipping {path}: no videos found')
     else:
+        unsupported = [str(p) for p in paths if not is_video_file(p) and not p.is_dir()]
         raise NotImplementedError(
-            "For multi view model predictions, either pass in multiple video views to be "
-            "predicted, or a directory containing videos"
+            'for multiview models, input paths must be either (a) .mp4 video files, one per '
+            'view, or (b) directories containing .mp4 videos, and the two cannot be mixed. '
+            + (
+                f'unsupported inputs (only .mp4 videos are supported; convert other formats '
+                f'such as .avi first): {unsupported}'
+                if unsupported
+                else f'got a mix of files and directories: {[str(p) for p in paths]}'
+            )
         )

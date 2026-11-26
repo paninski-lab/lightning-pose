@@ -31,7 +31,7 @@ Lightning Pose assumes the following project directory structure:
 
 * ``<LABELED_DATA_DIR>/``: The directory name, any subdirectory names, and image names are all flexible, as long as they are consistent with the first column of `<view_name>.csv` files (see below). As an example, each session/view pair can have its own subdirectory, which contains images that correspond to the labels. The same frames from all the views must have the same names; for example, the images corresponding to time point 39 should be named "<LABELED_DATA_DIR>/session0_view0/img000039.png" and "<LABELED_DATA_DIR>/session0_view1/img000039.png".
 
-* ``<VIDEO_DIR>/``: This is a single directory of videos, which **must** follow the naming convention ``<session_name>_<view_name>.mp4``. So in our example there should be two videos, named ``session0_view0.mp4`` and ``session0_view1.mp4``.
+* ``<VIDEO_DIR>/``: This directory is only required for semi-supervised models (where it must be non-empty); it can be omitted for purely supervised models. It is a single directory of videos, which **must** follow the naming convention ``<session_name>_<view_name>.mp4``. So in our example there should be two videos, named ``session0_view0.mp4`` and ``session0_view1.mp4``.
 
 * ``<view_name>.csv``: For each view (camera) there should be a table with keypoint labels (rows: frames; columns: keypoints). Note that these files can take any name, and need to be listed in the config file under the ``data.csv_file`` section. Each csv file must contain the same set of keypoints, and each must have the same number of rows (corresponding to specific points in time). For more details on the format, see :doc:`/source/directory_structure_reference/label_csv_file_format`.
 

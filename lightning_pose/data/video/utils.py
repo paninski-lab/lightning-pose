@@ -12,8 +12,8 @@ view) and ``__call__`` on the prepare class (build the wrapper).
 This module imports neither DALI nor PyNvVideoCodec, so it is safe to import on any machine.
 """
 
-import os
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Literal
 
 import numpy as np
@@ -32,6 +32,21 @@ from lightning_pose.data.utils import count_frames
 
 # to ignore imports for sphinx-autoapidoc
 __all__: list[str] = []
+
+
+def require_video_files(filenames: list[list[str]]) -> None:
+    """Raise unless every path in ``filenames`` is an existing file.
+
+    Args:
+        filenames: video paths, one inner list per view.
+
+    Raises:
+        FileNotFoundError: if a path does not exist or is not a file (e.g., a directory).
+    """
+    for view_list in filenames:
+        for vid in view_list:
+            if not Path(vid).is_file():
+                raise FileNotFoundError(f'{vid} is not a video file!')
 
 
 def normalize_frames(
@@ -156,15 +171,13 @@ class PreparePredictBase(ABC):
         else:
             filenames_2d = filenames  # type: ignore[assignment]
 
+        require_video_files(filenames_2d)
         for view_list in filenames_2d:
             if len(view_list) != 1:
                 raise NotImplementedError(
                     f'{self.backend_name} predict backend supports exactly one video per view '
                     f'(no multi-session batching); got {len(view_list)} videos for one view.'
                 )
-            vid = view_list[0]
-            if not os.path.exists(vid) or not os.path.isfile(vid):
-                raise FileNotFoundError(f'{vid} is not a video file!')
 
         view0_frame_count = count_frames(filenames_2d[0][0])
         if self.multiview:

@@ -251,6 +251,24 @@ class TestGetDataModule:
         with pytest.raises(RuntimeError, match='requires an NVIDIA GPU with CUDA'):
             get_data_module(cfg, heatmap_dataset, video_dir='/fake/videos')
 
+    @pytest.mark.parametrize('video_dir', [None, 'missing'])
+    def test_get_data_module_unsupervised_raises_without_videos(
+        self, cfg, heatmap_dataset, tmp_path, mocker, video_dir,
+    ):
+        """semi-supervised training needs a non-empty video directory."""
+        cfg = self._unsupervised_multi_gpu_cfg(cfg)
+        mocker.patch('lightning_pose.utils.device.require_cuda_for_semi_supervised')
+        if video_dir is not None:
+            video_dir = str(tmp_path / video_dir)
+        with pytest.raises(FileNotFoundError, match='semi-supervised training requires'):
+            get_data_module(cfg, heatmap_dataset, video_dir=video_dir)
+
+    def test_get_data_module_supervised_ignores_missing_video_dir(self, cfg, mocker):
+        cfg = self._supervised_multi_gpu_cfg(cfg)
+        mock_init = mocker.patch.object(BaseDataModule, '__init__', return_value=None)
+        get_data_module(cfg, Mock(spec=BaseTrackingDataset), video_dir='/does/not/exist')
+        mock_init.assert_called_once()
+
     def test_get_data_module_num_gpus_0(self, cfg, mocker):
         cfg = self._supervised_multi_gpu_cfg(cfg)
         # when num_gpus is set to 0, i.e. from a deprecated config

@@ -10,6 +10,15 @@ over time.
    :depth: 2
 
 
+v2.5.0 | November 25, 2026
+------------------------------------
+
+* The ``videos/`` directory (``data.video_dir``) is no longer required for purely supervised
+  models. It only needs to exist, and contain at least one ``.mp4`` file, when training with
+  semi-supervised (unsupervised) losses.
+* Post-training video prediction (``eval.predict_vids_after_training``) is skipped, rather than
+  raising an error, when ``eval.test_videos_directory`` is missing, null, or contains no videos.
+
 v2.1.2 | June 11, 2026
 ------------------------------------
 

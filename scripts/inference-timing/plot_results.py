@@ -15,8 +15,7 @@ Usage:
     python plot_results.py --input_dir results/ --output results/inference_timing.png
 """
 import argparse
-import glob
-import os
+from pathlib import Path
 
 import matplotlib
 
@@ -61,10 +60,10 @@ def parse_args(argv=None):
 
 
 def load_panels(input_dir):
-    csv_paths = sorted(glob.glob(os.path.join(input_dir, "*.csv")))
+    csv_paths = sorted(Path(input_dir).glob("*.csv"))
     panels = {}  # label -> DataFrame
     for path in csv_paths:
-        label = os.path.splitext(os.path.basename(path))[0]
+        label = path.stem
         df = pd.read_csv(path)
         if df.empty:
             continue

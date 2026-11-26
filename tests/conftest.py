@@ -35,7 +35,7 @@ from lightning_pose.data.datasets import (
 from lightning_pose.losses import get_loss_factories
 from lightning_pose.models import get_model
 from lightning_pose.utils.device import get_accelerator
-from lightning_pose.utils.io import get_videos_in_dir
+from lightning_pose.utils.io_video import get_videos_in_dir
 from lightning_pose.utils.predictions import PredictionHandler
 
 TOY_DATA_ROOT_DIR = str(lp.LP_ROOT_PATH / "data" / "mirror-mouse-example")

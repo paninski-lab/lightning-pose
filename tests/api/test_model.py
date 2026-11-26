@@ -15,6 +15,21 @@ from tests.api.model_helpers import _setup_test_model
 from tests.fetch_test_data import fetch_test_data_if_needed
 
 
+class TestCroppedCsvFilePath:
+    """Test the Model.cropped_csv_file_path method."""
+
+    def test_cropped_csv_file_path_under_image_preds_dir(self, tmp_path):
+        model = Model.__new__(Model)
+        model.model_dir = tmp_path
+        result = model.cropped_csv_file_path('/data/project/CollectedData.csv')
+        assert result == (
+            model.image_preds_dir() / 'CollectedData.csv' / 'cropped_CollectedData.csv'
+        )
+        assert result.parts[-3:] == (
+            'image_preds', 'CollectedData.csv', 'cropped_CollectedData.csv',
+        )
+
+
 class TestPredictOnLabelCsv:
     """Test the predict_on_label_csv method."""
 
@@ -211,8 +226,10 @@ class TestPredictOnVideoFile:
             )
 
         kwargs = mock_pv.call_args.kwargs
-        assert kwargs['video_file'] == [str(videos[1]), str(videos[0])]
-        assert kwargs['bbox_file'] == [str(bbox_files[1]), str(bbox_files[0])]
+        assert [str(v) for v in kwargs['video_file']] == [str(videos[1]), str(videos[0])]
+        assert [str(b) for b in kwargs['bbox_file']] == [
+            str(bbox_files[1]), str(bbox_files[0]),
+        ]
 
     def test_predict_on_video_file_multiview_wrong_bbox_count(self, tmp_path):
         """Raises ValueError when the number of bbox files doesn't match the view count."""

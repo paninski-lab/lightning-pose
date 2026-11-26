@@ -1,14 +1,14 @@
-"""Path handling functions."""
+"""Path handling, label-file parsing, and checkpoint discovery.
+
+Video-specific helpers live in :mod:`lightning_pose.utils.io_video`.
+"""
 
 from __future__ import annotations  # python 3.8 compatibility for sphinx
 
-import collections
 import logging
-import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import overload
 
 import numpy as np
 import pandas as pd
@@ -18,20 +18,22 @@ from omegaconf import DictConfig, ListConfig
 
 logger = logging.getLogger(__name__)
 
+# filenames of the per-label-CSV outputs, written to ``image_preds/<csv name>/``
+PREDICTIONS_CSV_NAME = 'predictions.csv'
+BBOX_CSV_NAME = 'bbox.csv'
+
 # to ignore imports for sphinx-autoapidoc
 __all__ = [
+    "BBOX_CSV_NAME",
+    "PREDICTIONS_CSV_NAME",
     "ckpt_path_from_base_path",
     "get_keypoint_names",
     "LabeledData",
     "parse_label_csv",
     "return_absolute_path",
+    "resolve_path",
     "return_absolute_data_paths",
-    "extract_session_name_from_video",
-    "find_video_files_for_views",
-    "get_videos_in_dir",
-    "check_video_paths",
     "get_context_img_paths",
-    "split_video_files_by_view",
 ]
 
 
@@ -58,19 +60,12 @@ def ckpt_path_from_base_path(
         str: path to model checkpoint, or None if none found.
 
     """
-    import glob
-
-    model_search_path = os.path.join(
-        base_path,
-        logging_dir_name,
-        glob.escape(model_name),
-        "version_*",
-        "checkpoints",
-        "*.ckpt",
-    )
-
-    # Find all checkpoint files
-    all_checkpoint_files = glob.glob(model_search_path)
+    # Find all checkpoint files; model_name is part of the base (not the pattern), so any glob
+    # characters in it are matched literally
+    model_dir = Path(base_path) / logging_dir_name / model_name
+    all_checkpoint_files = [
+        str(f) for f in model_dir.glob('version_*/checkpoints/*.ckpt')
+    ]
     if not all_checkpoint_files:
         return None
 
@@ -95,7 +90,7 @@ def ckpt_path_from_base_path(
     # Find all "best" checkpoints in the latest version
     best_ckpt_files = []
     for f in latest_version_files:
-        if "-best.ckpt" in os.path.basename(f):
+        if "-best.ckpt" in Path(f).name:
             best_ckpt_files.append(f)
 
     if len(best_ckpt_files) == 1:
@@ -148,7 +143,7 @@ def ckpt_path_from_base_path(
 
 def get_keypoint_names(
     cfg: DictConfig | ListConfig | None = None,
-    csv_file: str | None = None,
+    csv_file: str | Path | None = None,
     header_rows: list | None = [0, 1, 2],
 ) -> list[str]:
     """Return keypoint names from a label CSV file or from the config.
@@ -162,7 +157,7 @@ def get_keypoint_names(
     Returns:
         List of keypoint name strings.
     """
-    if csv_file is not None and os.path.exists(csv_file):
+    if csv_file is not None and Path(csv_file).exists():
         if header_rows is None:
             assert cfg is not None
             if "header_rows" in cfg.data:
@@ -206,7 +201,7 @@ class LabeledData:
 
 
 def parse_label_csv(
-    csv_file: str,
+    csv_file: str | Path,
     header_rows: list[int] | None = None,
 ) -> LabeledData:
     """Parse a label CSV file into a :class:`LabeledData` object in a single read.
@@ -234,7 +229,7 @@ def parse_label_csv(
     """
     if header_rows is None:
         header_rows = [0, 1, 2]
-    if not os.path.exists(csv_file):
+    if not Path(csv_file).exists():
         raise FileNotFoundError(f'could not find csv file at {csv_file}')
 
     csv_data = pd.read_csv(csv_file, header=header_rows, index_col=0)
@@ -323,9 +318,33 @@ def return_absolute_path(possibly_relative_path: str, n_dirs_back: int = 3) -> s
     return str(abs_path)
 
 
+def resolve_path(path: str | Path, root_directory: str | Path) -> Path:
+    """Resolve a path that is relative to a project root directory, or absolute.
+
+    Candidates are tried in order: ``root_directory / path`` (which is just ``path`` when it is
+    absolute), then ``path`` as given (relative to the current working directory).
+
+    Args:
+        path: file path, relative to ``root_directory`` or absolute.
+        root_directory: directory that relative paths are anchored to.
+
+    Returns:
+        path to the first existing candidate.
+
+    Raises:
+        FileNotFoundError: if no candidate exists; the message lists the locations searched.
+    """
+    candidates = [Path(root_directory) / path, Path(path)]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    searched = ', '.join(str(c) for c in dict.fromkeys(candidates))
+    raise FileNotFoundError(f'could not find {path}; looked in: {searched}')
+
+
 def return_absolute_data_paths(
     data_cfg: DictConfig, n_dirs_back: int = 3
-) -> tuple[str, str]:
+) -> tuple[str, str | None]:
     """Generate absolute path for our example toy data.
 
     @hydra.main decorator switches the cwd when executing the decorated function, e.g.,
@@ -336,183 +355,48 @@ def return_absolute_data_paths(
         n_dirs_back (int):
 
     Returns:
-        Tuple[str, str]: absolute paths to data and video folders.
+        Tuple[str, str | None]: absolute paths to data and video folders. The video path is
+        ``None`` if ``data.video_dir`` is unset; otherwise it is resolved but not validated,
+        since it does not need to exist for purely supervised models; use
+        :func:`~lightning_pose.utils.io_video.has_videos` or
+        :func:`~lightning_pose.utils.io_video.require_videos` to check it.
 
     """
     data_dir = return_absolute_path(data_cfg.data_dir, n_dirs_back=n_dirs_back)
-    if os.path.isabs(data_cfg.video_dir):
-        video_dir = data_cfg.video_dir
-    else:
-        video_dir = os.path.join(data_dir, data_cfg.video_dir)
-    # assert that those paths exist and in the proper format
-    assert os.path.isdir(data_dir)
-    assert os.path.isdir(video_dir) or os.path.isfile(video_dir)
+    # video_dir is optional (only semi-supervised models need it)
+    video_dir_cfg = data_cfg.get('video_dir')
+    video_dir = None
+    if video_dir_cfg is not None:
+        # an absolute video_dir overrides data_dir; a relative one is anchored to it
+        video_dir = str(Path(data_dir) / video_dir_cfg)
+    # only the data directory is required here; videos are needed solely for semi-supervised
+    # training and are validated on demand by `require_videos`
+    assert Path(data_dir).is_dir()
     return data_dir, video_dir
 
 
-@overload
-def get_videos_in_dir(
-    video_dir: str,
-    view_names: None = None,
-    return_mp4_only: bool = True,
-) -> list[str]: ...
 
 
-@overload
-def get_videos_in_dir(
-    video_dir: str,
-    view_names: list[str],
-    return_mp4_only: bool = True,
-) -> list[list[str]]: ...
 
 
-def get_videos_in_dir(
-    video_dir: str, view_names: list[str] | None = None, return_mp4_only: bool = True
-) -> list[str] | list[list[str]]:
-    """Gather videos to process from a single directory."""
-    assert os.path.isdir(video_dir)
-    # get all video files in directory, from allowed formats
-    allowed_formats = (".mp4", ".avi", ".mov")
-    if return_mp4_only:
-        allowed_formats = ".mp4"
-    if view_names:
-        # make a list of lists, where the outer list is over views, each inner list is over videos/
-        # sessions
-        all_video_files = sorted(os.listdir(video_dir))
-        video_files = [
-            [
-                os.path.join(video_dir, f)
-                for f in all_video_files
-                if (
-                    f.endswith(allowed_formats)
-                    and re.search(
-                        rf"(?<![0-9a-zA-Z]){re.escape(view)}(?![0-9a-zA-Z])", f
-                    )
-                )
-            ]
-            for view in view_names
-        ]
-        # check to make sure we have the same set of videos for each view
-        # naming convention is <vid_name>_<view_name[0]>, <vid_name>_<view_name[1]>, etc.
-        vid_names = [
-            [vid_name.split(f"_{view_names[v]}")[0] for vid_name in video_files_]
-            for v, video_files_ in enumerate(video_files)
-        ]
-        for view, view_files in zip(view_names, video_files, strict=True):
-            if len(view_files) == 0:
-                raise OSError(
-                    f"Did not find any video files for view '{view}' in {video_dir}. "
-                    "Video filenames must contain the view name delimited by "
-                    "non-alphanumeric characters, e.g. <vid_name>_<view_name>.mp4 "
-                    "or <vid_name>_<view_name>.short.mp4."
-                )
-        for vids_view in vid_names:
-            if set(vids_view) != set(vid_names[0]):
-                raise RuntimeError(
-                    "Mismatched video names across views! "
-                    "Please check your videos are in the format "
-                    "<vid_name>_<view_name[0]>, <vid_name>_<view_name[1]>, etc., "
-                    "where the `view_name` variable is defined in the config file."
-                )
-    else:
-        video_files = [
-            os.path.join(video_dir, f)
-            for f in os.listdir(video_dir)
-            if f.endswith(allowed_formats)
-        ]
-
-    if len(video_files) == 0:
-        raise OSError(f"Did not find any valid video files in {video_dir}")
-
-    return video_files
 
 
-@overload
-def check_video_paths(
-    video_paths: list[str] | str,
-    view_names: None = None,
-) -> list[str]: ...
 
 
-@overload
-def check_video_paths(
-    video_paths: list[str] | str,
-    view_names: list[str],
-) -> list[list[str]]: ...
 
 
-def check_video_paths(
-    video_paths: list[str] | str,
-    view_names: list[str] | None = None,
-) -> list[str] | list[list[str]]:
-    """Validate and normalise video paths, returning a flat or nested list of mp4 paths.
-
-    Accepts a single file path, a list of file paths, or a directory and returns a flat list of
-    video paths for single-view models, or a nested list ``(views × sessions)`` for multi-view
-    models.
-
-    Args:
-        video_paths: single video file path, list of video file paths, or a directory.
-        view_names: if provided, organise the paths by view name for a multi-view model.
-
-    Returns:
-        For single-view: ``list[str]`` of mp4 file paths.
-        For multi-view: ``list[list[str]]`` where outer list indexes views.
-
-    Raises:
-        ValueError: if ``video_paths`` is not a valid file, list, or directory.
-    """
-    # get input data
-    if isinstance(video_paths, list):
-        # presumably a list of files
-        filenames = video_paths
-    elif isinstance(video_paths, str) and os.path.isfile(video_paths):
-        # single video file
-        filenames = [video_paths]
-    elif isinstance(video_paths, str) and os.path.isdir(video_paths):
-        # directory of videos
-        filenames = get_videos_in_dir(video_paths, view_names=view_names)
-    else:
-        raise ValueError(
-            "`video_paths_list` must be a list of files, a single file, or a directory name"
-        )
-    for filename in filenames:
-        if isinstance(filename, str):
-            filename = [filename]
-        for f in filename:
-            assert f.endswith(".mp4"), "video files must be mp4 format!"
-
-    return filenames
 
 
-def collect_video_files_by_view(
-    video_files: list[Path], view_names: list[str]
-) -> dict[str, Path]:
-    """Given a list of video files, matches them to views based on their filenames.
 
-    Filenames must contain their corresponding view's name, separated by the rest of the filename
-    by some non-alphanumeric delimiter. For example, mouse_top_3.mp4 is allowed, but mousetop3.mp4
-    is not allowed.
-    """
-    assert len(video_files) == len(view_names), (
-        f"{len(video_files)} != {len(view_names)}"
-    )
-    video_files_by_view: dict[str, Path] = {}
-    for view_name in view_names:
-        # Search all the video_files for a match.
-        for video_file in video_files:
-            if re.search(
-                rf"(?<!0-9a-zA-Z){re.escape(view_name)}(?![0-9a-zA-Z])", video_file.stem
-            ):
-                if view_name not in video_files_by_view:
-                    video_files_by_view[view_name] = video_file
-                else:
-                    raise ValueError(f"File matches multiple views: {video_file}")
-        # After the search if nothing was added to dict, there is a problem.
-        if view_name not in video_files_by_view:
-            raise ValueError(f"File not found for view: {view_name}")
 
-    return video_files_by_view
+
+
+
+
+
+
+
+
 
 
 def get_context_img_paths(center_img_path: Path) -> list[Path]:
@@ -573,121 +457,3 @@ def fix_empty_first_row(df: pd.DataFrame) -> pd.DataFrame:
         return fixed_df
 
     return df
-
-
-def extract_session_name_from_video(video_filename: str, view_names: list[str]) -> str:
-    """
-    Extract session name from video filename by removing the view name.
-
-    Simple approach: remove the underscore and view name from the filename.
-
-    Args:
-        video_filename: Name of the video file (with or without extension)
-        view_names: List of possible view names to remove
-
-    Returns:
-        Session name with view name removed
-    """
-    # Remove file extension if present
-    name_without_ext = Path(video_filename).stem
-
-    # Try to remove each view name (with underscore before it)
-    for view_name in view_names:
-        if view_name in name_without_ext:
-            # Remove the underscore and view name
-            session_name = name_without_ext.replace(f"_{view_name}", "")
-            if session_name == name_without_ext:
-                # view name was found but not in the expected "_<view>" form (e.g. a hyphen or
-                # no separator was used instead); the session name below still contains the view
-                # name, so this video likely won't be grouped with its other views
-                logger.warning(
-                    f"video filename '{video_filename}' contains view name '{view_name}' but "
-                    f"not as a '_{view_name}' suffix; expected the pattern "
-                    f"'<session>_{view_name}'. This video may not be grouped correctly with "
-                    "its other views for multiview prediction."
-                )
-            return session_name
-
-    # If no view name found, return the original name
-    return name_without_ext
-
-
-def extract_view_name_from_video(
-    video_filename: str, view_names: list[str]
-) -> str | None:
-    """Like extract_session_name_from_video but returns the view name (or None if not found)."""
-    for view_name in view_names:
-        if view_name in Path(video_filename).stem:
-            return view_name
-    return None
-
-
-def split_video_files_by_view(
-    video_paths: list[Path],
-    view_names: list[str],
-) -> list[list[Path]]:
-    """
-    For a list of videos from different sessions and views, split them up and return a list of
-    lists like
-    `[[sess0_view0.mp4, sess0_view1.mp4, ...], [sess1_view0.mp4, sess1_view1.mp4, ...], ...]`
-
-    Args:
-        video_paths: List of paths to video files to split
-        view_names: List of view names to find videos for
-
-    Returns:
-        List for each session, each containing a sub-list with videos for each view for
-        that session
-    """
-    # map of session -> view -> video
-    session_view_video_map = collections.defaultdict(dict[str, Path])
-
-    for video_path in video_paths:
-        view = extract_view_name_from_video(video_path.name, view_names)
-
-        if view is not None:
-            session = extract_session_name_from_video(video_path.name, view_names)
-
-            session_view_video_map[session][view] = video_path
-
-    video_views_per_session = []
-    for view_to_video_path in session_view_video_map.values():
-        # skip sessions with any missing view
-        if any(view_name not in view_to_video_path for view_name in view_names):
-            continue
-
-        view_list = []
-        for view_name in view_names:
-            view_list.append(view_to_video_path[view_name])
-        video_views_per_session.append(view_list)
-    return video_views_per_session
-
-
-def find_video_files_for_views(
-    video_dir: str, view_names: list[str]
-) -> list[list[Path]]:
-    """
-    Search inside a folder to find a list of videos from different sessions and views, split them
-    up and return a list of lists like
-    `[[sess0_view0.mp4, sess0_view1.mp4, ...], [sess1_view0.mp4, sess1_view1.mp4, ...], ...]`
-
-    Args:
-        video_dir: Directory containing video files
-        view_names: List of view names to find videos for
-
-    Returns:
-        List for each session, each containing a sub-list with videos for each view for
-        that session
-    """
-    video_dir_path = Path(video_dir)
-
-    if not video_dir_path.exists():
-        raise FileNotFoundError(f"Video directory not found: {video_dir}")
-
-    # Get all video files in the directory
-    all_video_files = list(video_dir_path.glob("*.mp4"))
-
-    if not all_video_files:
-        raise FileNotFoundError(f"No video files found in {video_dir}")
-
-    return split_video_files_by_view(all_video_files, view_names)

@@ -12,8 +12,8 @@ run_benchmark.sh calls this and evals the output:
     eval "$(python3 load_config.py --config timing_config.yaml)"
 """
 import argparse
-import os
 import shlex
+from pathlib import Path
 
 import yaml
 
@@ -58,7 +58,7 @@ def main(argv=None):
     print("DECODERS=(" + " ".join(shlex.quote(d) for d in decoders) + ")")
     print(f"NUM_WARMUP={shlex.quote(str(timing.get('num_warmup', 1)))}")
     print(f"NUM_REPEATS={shlex.quote(str(timing.get('num_repeats', 3)))}")
-    default_output_dir = os.path.expanduser("~/inference_timing_results")
+    default_output_dir = Path("~/inference_timing_results").expanduser()
     print(f"OUTPUT_DIR={shlex.quote(str(output.get('dir') or default_output_dir))}")
     print(f"GPU_LABEL={shlex.quote(str(output.get('gpu_label') or ''))}")
     print(f"MAX_BATCH_SIZE={shlex.quote(str(export.get('max_batch_size', 8)))}")

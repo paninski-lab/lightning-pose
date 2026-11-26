@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-import os
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -86,15 +86,24 @@ def clean_any_nans(data: torch.Tensor, dim: int) -> torch.Tensor:
     raise ValueError(f"dim must be 0 or 1, got {dim}")
 
 
-def count_frames(video_file: str) -> int:
+def count_frames(video_file: str | Path) -> int:
+    """Count the number of frames in a video.
+
+    Args:
+        video_file: path to the video file.
+
+    Returns:
+        number of frames reported by the video container.
+
+    Raises:
+        FileNotFoundError: if ``video_file`` is not an existing file.
     """
-    Simple function to count the number of frames in a video.
-    """
-    assert os.path.isfile(video_file)
+    if not Path(video_file).is_file():
+        raise FileNotFoundError(f'{video_file} is not a video file!')
 
     import cv2
 
-    cap = cv2.VideoCapture(video_file)
+    cap = cv2.VideoCapture(str(video_file))
     num_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     cap.release()
 
