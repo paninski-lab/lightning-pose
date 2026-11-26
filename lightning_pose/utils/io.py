@@ -143,7 +143,7 @@ def ckpt_path_from_base_path(
 
 def get_keypoint_names(
     cfg: DictConfig | ListConfig | None = None,
-    csv_file: str | None = None,
+    csv_file: str | Path | None = None,
     header_rows: list | None = [0, 1, 2],
 ) -> list[str]:
     """Return keypoint names from a label CSV file or from the config.
@@ -201,7 +201,7 @@ class LabeledData:
 
 
 def parse_label_csv(
-    csv_file: str,
+    csv_file: str | Path,
     header_rows: list[int] | None = None,
 ) -> LabeledData:
     """Parse a label CSV file into a :class:`LabeledData` object in a single read.

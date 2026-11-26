@@ -113,7 +113,7 @@ def get_imgaug_transform(cfg: DictConfig | ListConfig, data_dir: str | Path) -> 
 
 def get_dataset(
     cfg: DictConfig | ListConfig,
-    data_dir: str,
+    data_dir: str | Path,
     imgaug_transform: iaa.Sequential,
 ) -> BaseTrackingDataset | HeatmapDataset | MultiviewHeatmapDataset:
     """Build a labeled dataset from a Hydra config.

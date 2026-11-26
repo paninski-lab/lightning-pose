@@ -293,12 +293,7 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
             path of the form ``{model_dir}/image_preds/{csv_name}/cropped_{csv_name}``.
         """
         csv_file_path = Path(csv_file_path)
-        return (
-            self.model_dir
-            / "image_preds"
-            / csv_file_path.name
-            / ("cropped_" + csv_file_path.name)
-        )
+        return self.image_preds_dir() / csv_file_path.name / ("cropped_" + csv_file_path.name)
 
     def predict_frame(
         self,
@@ -592,17 +587,16 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
         data_module_pred = _build_datamodule_pred(cfg_pred)
 
         preds_file_path = output_dir / PREDICTIONS_CSV_NAME
-        preds_file = str(preds_file_path)
 
         df = predict_dataset(
-            model=self, data_module=data_module_pred, preds_file=preds_file, cfg=cfg_pred,
+            model=self, data_module=data_module_pred, preds_file=preds_file_path, cfg=cfg_pred,
         )
 
         if compute_metrics:
             metrics = compute_metrics_single(
                 cfg=cfg_pred,
-                labels_file=str(csv_file),
-                preds_file=preds_file,
+                labels_file=csv_file,
+                preds_file=preds_file_path,
                 data_module=data_module_pred,
             )
         else:
@@ -676,7 +670,7 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
         for i, _view_name in enumerate(view_names):
             output_dir = self.image_preds_dir() / csv_file_per_view[i].name
             output_dir.mkdir(parents=True, exist_ok=True)
-            preds_files.append(str(output_dir / PREDICTIONS_CSV_NAME))
+            preds_files.append(output_dir / PREDICTIONS_CSV_NAME)
 
         # Outputs dict[str, pd.DataFrame] because inputs indicate multiview.
         view_to_df_dict = predict_dataset(
@@ -690,7 +684,7 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
             ):
                 metrics[view_name] = compute_metrics_single(
                     cfg=self.cfg,
-                    labels_file=str(labels_file),
+                    labels_file=labels_file,
                     preds_file=_preds_file,
                     data_module=data_module_pred,
                 )
@@ -773,9 +767,9 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
             bbox_file=bbox_file,
         )
         if generate_labeled_video:
-            labeled_mp4_file = str(self.labeled_videos_dir() / labeled_video_name(video_file))
+            labeled_mp4_file = self.labeled_videos_dir() / labeled_video_name(video_file)
             generate_labeled_video_fn(
-                video_file=str(video_file),
+                video_file=video_file,
                 preds_df=df,
                 output_mp4_file=labeled_mp4_file,
                 confidence_thresh_for_vid=self.cfg.eval.confidence_thresh_for_vid,
@@ -789,7 +783,7 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
             metrics = compute_metrics_single(
                 cfg=self.cfg,
                 labels_file=None,
-                preds_file=str(prediction_csv_file),
+                preds_file=prediction_csv_file,
                 data_module=data_module,
             )
         else:
@@ -877,7 +871,7 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
         ]
 
         prediction_csv_file_list = [
-            str(output_dir / prediction_csv_name(video_file))
+            output_dir / prediction_csv_name(video_file)
             for video_file in video_file_per_view
         ]
 
@@ -894,11 +888,9 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
         )
         if generate_labeled_video:
             for video_file, preds_df in zip(video_file_per_view, df_list, strict=True):
-                labeled_mp4_file = str(
-                    self.labeled_videos_dir() / labeled_video_name(video_file)
-                )
+                labeled_mp4_file = self.labeled_videos_dir() / labeled_video_name(video_file)
                 generate_labeled_video_fn(
-                    video_file=str(video_file),
+                    video_file=video_file,
                     preds_df=preds_df,
                     output_mp4_file=labeled_mp4_file,
                     confidence_thresh_for_vid=self.cfg.eval.confidence_thresh_for_vid,

@@ -725,9 +725,9 @@ class MultiviewHeatmapDataset(torch.utils.data.Dataset):
         assert not self.do_context, "3D augmentations for context model not yet supported"
         cam_params_df = pd.read_csv(camera_params_path, index_col=0, header=[0])
         img_idxs_labels = [
-            i.split('/')[-1] for i in self.dataset[self.view_names[0]].image_names
+            Path(i).name for i in self.dataset[self.view_names[0]].image_names
         ]
-        img_idxs_calib = [i.split('/')[-1] for i in cam_params_df.index]
+        img_idxs_calib = [Path(i).name for i in cam_params_df.index]
         assert np.all(img_idxs_labels == img_idxs_calib)
         cam_params_file_to_camgroup = {
             f: self._load_camgroup(f) for f in cam_params_df.file.unique()

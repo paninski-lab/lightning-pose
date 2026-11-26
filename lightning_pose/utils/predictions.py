@@ -48,7 +48,7 @@ class PredictionHandler:
         self,
         cfg: DictConfig | ListConfig,
         data_module: BaseDataModule | UnlabeledDataModule | None = None,
-        video_file: str | None = None,
+        video_file: str | Path | None = None,
     ) -> None:
         """Initialize a PredictionHandler.
 
@@ -440,7 +440,7 @@ def _load_bbox_dfs(
     bbox_dfs = []
     for video, bbox in zip(video_files, bbox_files, strict=True):
         bbox_df = pd.read_csv(bbox, index_col=0)
-        frame_count = count_frames(str(video))
+        frame_count = count_frames(video)
         if len(bbox_df) != frame_count:
             raise ValueError(
                 f'{Path(bbox).name} has {len(bbox_df)} rows but {Path(video).name} has '
@@ -655,7 +655,7 @@ def _create_labeled_video(
     dotsize: int = 4,
     colormap: str | None = "cool",
     fps: float | None = None,
-    output_video_path: str = "movie.mp4",
+    output_video_path: str | Path = "movie.mp4",
     start_time: float = 0.0,
     bbox_arr: np.ndarray | None = None,
 ) -> None:
@@ -794,15 +794,15 @@ def _create_labeled_video(
 
     clip_marked = clip.transform(add_marker_and_timestamps)
     clip_marked.write_videofile(
-        output_video_path, codec="libx264", fps=fps or fps_og or 20.0
+        str(output_video_path), codec="libx264", fps=fps or fps_og or 20.0
     )
     clip_marked.close()
 
 
 def generate_labeled_video(
-    video_file: str,
+    video_file: str | Path,
     preds_df: pd.DataFrame,
-    output_mp4_file: str,
+    output_mp4_file: str | Path,
     confidence_thresh_for_vid: float,
     colormap: str,
     bbox_df: pd.DataFrame | None = None,
@@ -827,7 +827,7 @@ def generate_labeled_video(
     ys_arr = keypoints_arr[:, :, 1]
     mask_array = keypoints_arr[:, :, 2] > confidence_thresh_for_vid
     # video generation
-    video_clip = VideoFileClip(video_file)
+    video_clip = VideoFileClip(str(video_file))
     _create_labeled_video(
         clip=video_clip,
         xs_arr=xs_arr,

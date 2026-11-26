@@ -302,8 +302,11 @@ def get_model(
     if cfg.model.get('checkpoint', None):
         ckpt = cfg.model.checkpoint
         logger.info(f'loading weights from {ckpt}')
-        if not ckpt.endswith('.ckpt'):
-            ckpt = str(sorted(Path(ckpt).rglob('*.ckpt'))[0])
+        if Path(ckpt).suffix != '.ckpt':
+            ckpt_files = sorted(Path(ckpt).rglob('*.ckpt'))
+            if not ckpt_files:
+                raise FileNotFoundError(f'no .ckpt files found in {ckpt}')
+            ckpt = str(ckpt_files[0])
         try:
             state_dict = torch.load(ckpt)['state_dict']
         except Exception as e:

@@ -82,6 +82,21 @@ def test_count_frames(video_list):
     assert num_frames == 994
 
 
+def test_count_frames_accepts_path(video_list):
+    from pathlib import Path
+
+    from lightning_pose.data.utils import count_frames
+
+    assert count_frames(Path(video_list[0])) == 994
+
+
+def test_count_frames_missing_file_raises(tmp_path):
+    from lightning_pose.data.utils import count_frames
+
+    with pytest.raises(FileNotFoundError, match='not a video file'):
+        count_frames(tmp_path / 'missing.mp4')
+
+
 def test_compute_num_train_frames():
 
     from lightning_pose.data.utils import compute_num_train_frames
