@@ -94,7 +94,13 @@ def handle(args: argparse.Namespace) -> None:
     """Handle the create_bbox command."""
     import lightning_pose.utils.cropzoom as cz  # noqa: F811
     from lightning_pose.api import Model  # noqa: F811
-    from lightning_pose.utils.io_video import is_video_file, list_video_files
+    from lightning_pose.utils.io import BBOX_CSV_NAME, PREDICTIONS_CSV_NAME
+    from lightning_pose.utils.io_video import (
+        bbox_csv_name,
+        is_video_file,
+        list_video_files,
+        prediction_csv_name,
+    )
 
     model = Model.from_dir(args.model_dir)
 
@@ -114,12 +120,12 @@ def handle(args: argparse.Namespace) -> None:
 
     for input_path in input_paths:
         if is_video_file(input_path):
-            input_preds_file = model.video_preds_dir() / (input_path.stem + '.csv')
-            output_bbox_file = model.video_preds_dir() / (input_path.stem + '_bbox.csv')
+            input_preds_file = model.video_preds_dir() / prediction_csv_name(input_path)
+            output_bbox_file = model.video_preds_dir() / bbox_csv_name(input_path)
         elif input_path.suffix == '.csv':
             preds_dir = model.image_preds_dir() / input_path.name
-            input_preds_file = preds_dir / 'predictions.csv'
-            output_bbox_file = preds_dir / 'bbox.csv'
+            input_preds_file = preds_dir / PREDICTIONS_CSV_NAME
+            output_bbox_file = preds_dir / BBOX_CSV_NAME
         else:
             raise NotImplementedError('only mp4 and csv files are supported.')
 

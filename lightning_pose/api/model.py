@@ -27,7 +27,12 @@ from lightning_pose.data.datatypes import MultiviewPredictionResult, PredictionR
 from lightning_pose.metrics import compute_metrics_single
 from lightning_pose.models import ALLOWED_MODELS
 from lightning_pose.utils.inference_types import _Precision, _Reader, _Runtime
-from lightning_pose.utils.io_video import match_videos_to_views
+from lightning_pose.utils.io import PREDICTIONS_CSV_NAME
+from lightning_pose.utils.io_video import (
+    labeled_video_name,
+    match_videos_to_views,
+    prediction_csv_name,
+)
 from lightning_pose.utils.predictions import generate_labeled_video as generate_labeled_video_fn
 from lightning_pose.utils.predictions import (
     predict_dataset,
@@ -586,7 +591,7 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
 
         data_module_pred = _build_datamodule_pred(cfg_pred)
 
-        preds_file_path = output_dir / "predictions.csv"
+        preds_file_path = output_dir / PREDICTIONS_CSV_NAME
         preds_file = str(preds_file_path)
 
         df = predict_dataset(
@@ -671,7 +676,7 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
         for i, _view_name in enumerate(view_names):
             output_dir = self.image_preds_dir() / csv_file_per_view[i].name
             output_dir.mkdir(parents=True, exist_ok=True)
-            preds_files.append(str(output_dir / "predictions.csv"))
+            preds_files.append(str(output_dir / PREDICTIONS_CSV_NAME))
 
         # Outputs dict[str, pd.DataFrame] because inputs indicate multiview.
         view_to_df_dict = predict_dataset(
@@ -757,7 +762,7 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        prediction_csv_file = output_dir / f"{video_file.stem}.csv"
+        prediction_csv_file = output_dir / prediction_csv_name(video_file)
 
         df = predict_video(
             video_file=str(video_file),
@@ -768,7 +773,7 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
             bbox_file=bbox_file,
         )
         if generate_labeled_video:
-            labeled_mp4_file = str(self.labeled_videos_dir() / f"{video_file.stem}_labeled.mp4")
+            labeled_mp4_file = str(self.labeled_videos_dir() / labeled_video_name(video_file))
             generate_labeled_video_fn(
                 video_file=str(video_file),
                 preds_df=df,
@@ -872,7 +877,7 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
         ]
 
         prediction_csv_file_list = [
-            str(output_dir / f"{video_file.stem}.csv")
+            str(output_dir / prediction_csv_name(video_file))
             for video_file in video_file_per_view
         ]
 
@@ -890,7 +895,7 @@ class Model(_RuntimeMixin):  # pyright: ignore[reportGeneralTypeIssues]
         if generate_labeled_video:
             for video_file, preds_df in zip(video_file_per_view, df_list, strict=True):
                 labeled_mp4_file = str(
-                    self.labeled_videos_dir() / f"{video_file.stem}_labeled.mp4"
+                    self.labeled_videos_dir() / labeled_video_name(video_file)
                 )
                 generate_labeled_video_fn(
                     video_file=str(video_file),

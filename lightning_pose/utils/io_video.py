@@ -33,9 +33,14 @@ logger = logging.getLogger(__name__)
 # video formats accepted for training and inference; compared case-insensitively
 VIDEO_SUFFIXES: tuple[str, ...] = ('.mp4',)
 
+# suffix of the per-video bbox CSVs, i.e. ``<video_stem>_bbox.csv``
+BBOX_CSV_SUFFIX = '_bbox.csv'
+
 # to ignore imports for sphinx-autoapidoc
 __all__ = [
+    'BBOX_CSV_SUFFIX',
     'VIDEO_SUFFIXES',
+    'bbox_csv_name',
     'extract_session_name_from_video',
     'extract_view_name_from_video',
     'filename_matches_view',
@@ -43,11 +48,32 @@ __all__ = [
     'group_videos_by_session',
     'has_videos',
     'is_video_file',
+    'labeled_video_name',
     'list_video_files',
     'match_videos_to_views',
     'normalize_video_paths',
+    'prediction_csv_name',
     'require_videos',
 ]
+
+
+# ---------------------------------------------------------------------------------------------
+# Output filename conventions (one place, so writers and "skip existing" checks agree)
+# ---------------------------------------------------------------------------------------------
+
+def prediction_csv_name(video: str | Path) -> str:
+    """Return the name of the predictions CSV for a video: ``<video_stem>.csv``."""
+    return f'{Path(video).stem}.csv'
+
+
+def bbox_csv_name(video: str | Path) -> str:
+    """Return the name of the bbox CSV for a video: ``<video_stem>_bbox.csv``."""
+    return f'{Path(video).stem}{BBOX_CSV_SUFFIX}'
+
+
+def labeled_video_name(video: str | Path) -> str:
+    """Return the name of the labeled (keypoint-overlay) video: ``<video_stem>_labeled.mp4``."""
+    return f'{Path(video).stem}_labeled.mp4'
 
 
 # ---------------------------------------------------------------------------------------------

@@ -21,6 +21,7 @@ from lightning_pose.pipelines.base import Pipeline, PipelineResult
 from lightning_pose.pipelines.stages import KeypointBboxStage
 from lightning_pose.utils.device import get_accelerator
 from lightning_pose.utils.inference_types import _Precision, _Reader
+from lightning_pose.utils.io_video import bbox_csv_name, labeled_video_name, prediction_csv_name
 from lightning_pose.utils.predictions import PredictionHandler
 from lightning_pose.utils.predictions import generate_labeled_video as generate_labeled_video_fn
 
@@ -299,16 +300,16 @@ class CropZoomPipeline(Pipeline):
                 f'{self.bbox_stage.num_fallback} of {len(bbox_df)} frames had no usable '
                 f'detection and reused the previous frame\'s bbox'
             )
-        preds_df.to_csv(output_dir / f'{video_file.stem}.csv')
+        preds_df.to_csv(output_dir / prediction_csv_name(video_file))
         # lineterminator='\n' keeps output byte-identical across platforms, as in generate_bbox
-        bbox_df.to_csv(output_dir / f'{video_file.stem}_bbox.csv', lineterminator='\n')
+        bbox_df.to_csv(output_dir / bbox_csv_name(video_file), lineterminator='\n')
         if generate_labeled_video:
             labeled_dir = output_dir / 'labeled_videos'
             labeled_dir.mkdir(parents=True, exist_ok=True)
             generate_labeled_video_fn(
                 video_file=str(video_file),
                 preds_df=preds_df,
-                output_mp4_file=str(labeled_dir / f'{video_file.stem}_labeled.mp4'),
+                output_mp4_file=str(labeled_dir / labeled_video_name(video_file)),
                 confidence_thresh_for_vid=self.pose_estimator.cfg.eval.confidence_thresh_for_vid,
                 colormap=self.pose_estimator.cfg.eval.get('colormap', 'cool'),
                 bbox_df=bbox_df,

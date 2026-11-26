@@ -361,7 +361,7 @@ def _predict_cropzoom(args: argparse.Namespace) -> None:
     """
     # delay these imports because they're slow
     from lightning_pose.pipelines import CropZoomPipeline
-    from lightning_pose.utils.io_video import is_video_file, list_video_files
+    from lightning_pose.utils.io_video import is_video_file, list_video_files, prediction_csv_name
 
     sizing, anchor_keypoints = resolve_bbox_sizing(
         args.crop_ratio, args.crop_size, args.anchor_keypoints,
@@ -393,7 +393,7 @@ def _predict_cropzoom(args: argparse.Namespace) -> None:
     output_dir = pipeline.pose_estimator.video_preds_dir()
     extra_kwargs = {} if args.batch_size is None else {"batch_size": args.batch_size}
     for video_file in video_files:
-        if not args.overwrite and (output_dir / f"{video_file.stem}.csv").exists():
+        if not args.overwrite and (output_dir / prediction_csv_name(video_file)).exists():
             logger.info(f'skipping {video_file} (prediction file already exists)')
             continue
         pipeline.predict_on_video_file(
@@ -426,8 +426,14 @@ def _predict_multi_type(
         bbox_dir: optional directory containing bbox CSV files. For CSV inputs, ``bbox.csv``
             inside this directory is used. For video inputs, ``<stem>_bbox.csv`` is used.
     """
-    # delay this import because it's slow
-    from lightning_pose.utils.io_video import is_video_file, list_video_files
+    # delay these imports because they're slow
+    from lightning_pose.utils.io import BBOX_CSV_NAME, PREDICTIONS_CSV_NAME
+    from lightning_pose.utils.io_video import (
+        bbox_csv_name,
+        is_video_file,
+        list_video_files,
+        prediction_csv_name,
+    )
 
     if path.is_dir():
         image_files = [p for p in path.iterdir() if p.is_file() and p.suffix in [".png", ".jpg"]]
@@ -447,7 +453,7 @@ def _predict_multi_type(
 
     elif is_video_file(path):
         # Check if prediction file already exists
-        prediction_csv_file = model.video_preds_dir() / f"{path.stem}.csv"
+        prediction_csv_file = model.video_preds_dir() / prediction_csv_name(path)
         if skip_existing and prediction_csv_file.exists():
             logger.info(f'skipping {path} (prediction file already exists)')
             return
@@ -456,19 +462,19 @@ def _predict_multi_type(
             video_file=path,
             generate_labeled_video=(not skip_viz),
             progress_file=progress_file,
-            bbox_file=bbox_dir / f'{path.stem}_bbox.csv' if bbox_dir is not None else None,
+            bbox_file=bbox_dir / bbox_csv_name(path) if bbox_dir is not None else None,
             reader=reader,
         )
     elif path.suffix == ".csv":
         # Check if prediction file already exists
-        prediction_csv_file = model.image_preds_dir() / path.name / "predictions.csv"
+        prediction_csv_file = model.image_preds_dir() / path.name / PREDICTIONS_CSV_NAME
         if skip_existing and prediction_csv_file.exists():
             logger.info(f'skipping {path} (prediction file already exists)')
             return
 
         model.predict_on_label_csv(
             csv_file=path,
-            bbox_file=bbox_dir / "bbox.csv" if bbox_dir is not None else None,
+            bbox_file=bbox_dir / BBOX_CSV_NAME if bbox_dir is not None else None,
         )
     elif path.suffix in [".png", ".jpg"]:
         raise NotImplementedError("Not yet implemented: predicting on image files.")
@@ -504,10 +510,12 @@ def _predict_multi_type_multi_view(
     """
     # delay this import because it's slow
     from lightning_pose.utils.io_video import (
+        bbox_csv_name,
         extract_session_name_from_video,
         group_videos_by_session,
         is_video_file,
         list_video_files,
+        prediction_csv_name,
     )
 
     # if we pass in all videos, collect them into session batches and process
@@ -527,7 +535,7 @@ def _predict_multi_type_multi_view(
         )
         for video_file_per_view in video_files_split:
             if skip_existing and all(
-                (model.video_preds_dir() / f"{Path(video).stem}.csv").exists()
+                (model.video_preds_dir() / prediction_csv_name(video)).exists()
                 for video in video_file_per_view
             ):
                 session_name = extract_session_name_from_video(
@@ -539,7 +547,7 @@ def _predict_multi_type_multi_view(
             bbox_file_per_view = None
             if bbox_dir is not None:
                 bbox_file_per_view = [
-                    bbox_dir / f'{Path(video).stem}_bbox.csv' for video in video_file_per_view
+                    bbox_dir / bbox_csv_name(video) for video in video_file_per_view
                 ]
                 missing = [f for f in bbox_file_per_view if not f.exists()]
                 if missing:

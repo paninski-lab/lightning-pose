@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from lightning_pose.utils.io_video import (
+    bbox_csv_name,
     extract_session_name_from_video,
     extract_view_name_from_video,
     filename_matches_view,
@@ -15,11 +16,26 @@ from lightning_pose.utils.io_video import (
     group_videos_by_session,
     has_videos,
     is_video_file,
+    labeled_video_name,
     list_video_files,
     match_videos_to_views,
     normalize_video_paths,
+    prediction_csv_name,
     require_videos,
 )
+
+
+class TestOutputNames:
+    """Test the output filename convention helpers."""
+
+    @pytest.mark.parametrize('video', ['/a/b/vid.mp4', 'vid.mp4', Path('/a/vid.mp4'), 'vid'])
+    def test_output_names(self, video):
+        assert prediction_csv_name(video) == 'vid.csv'
+        assert bbox_csv_name(video) == 'vid_bbox.csv'
+        assert labeled_video_name(video) == 'vid_labeled.mp4'
+
+    def test_output_names_keep_inner_dots(self):
+        assert prediction_csv_name('a.b.mp4') == 'a.b.csv'
 
 
 class TestIsVideoFile:

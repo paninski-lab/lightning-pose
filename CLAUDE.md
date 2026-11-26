@@ -530,6 +530,12 @@ groups the functions; the rules that matter when adding code:
   training, which also transposes to **views x sessions**, the only layout the DALI readers want.
 - `normalize_video_paths` turns a file, list, or directory into a validated list and raises
   `ValueError` naming any file with an unsupported suffix.
+- **Output filename conventions live in one place**, so writers and `--skip_existing` checks
+  cannot drift: per-video outputs are `prediction_csv_name(video)` (`<stem>.csv`),
+  `bbox_csv_name(video)` (`<stem>_bbox.csv`, suffix `BBOX_CSV_SUFFIX`) and
+  `labeled_video_name(video)` (`<stem>_labeled.mp4`) in `io_video.py`; per-label-CSV outputs are
+  `PREDICTIONS_CSV_NAME` and `BBOX_CSV_NAME` in `io.py`. Never build these names with f-strings
+  at a call site.
 - `data/video/utils.py::require_video_files` is the reader-side check that every path is an
   existing file; it is separate because it runs on already-resolved paths inside the readers.
 

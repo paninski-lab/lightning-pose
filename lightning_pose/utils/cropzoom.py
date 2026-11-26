@@ -17,6 +17,7 @@ from PIL import Image
 
 from lightning_pose.data.bboxes import keypoints_to_bboxes
 from lightning_pose.utils import io
+from lightning_pose.utils.io_video import BBOX_CSV_SUFFIX
 
 logger = logging.getLogger(__name__)
 
@@ -329,9 +330,9 @@ def smooth_bbox(
             f'unsupported method {method!r}; choose one of {supported_methods}.'
         )
 
-    bbox_files = sorted(input_bbox_dir.glob('*_bbox.csv'))
+    bbox_files = sorted(input_bbox_dir.glob(f'*{BBOX_CSV_SUFFIX}'))
     if not bbox_files:
-        raise ValueError(f'no *_bbox.csv files found in {input_bbox_dir}.')
+        raise ValueError(f'no *{BBOX_CSV_SUFFIX} files found in {input_bbox_dir}.')
 
     output_dir.mkdir(parents=True, exist_ok=True)
 

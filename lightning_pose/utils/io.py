@@ -18,8 +18,14 @@ from omegaconf import DictConfig, ListConfig
 
 logger = logging.getLogger(__name__)
 
+# filenames of the per-label-CSV outputs, written to ``image_preds/<csv name>/``
+PREDICTIONS_CSV_NAME = 'predictions.csv'
+BBOX_CSV_NAME = 'bbox.csv'
+
 # to ignore imports for sphinx-autoapidoc
 __all__ = [
+    "BBOX_CSV_NAME",
+    "PREDICTIONS_CSV_NAME",
     "ckpt_path_from_base_path",
     "get_keypoint_names",
     "LabeledData",
